@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import Transaction from '../models/Transaction.js'
 import Category from '../models/Category.js'
+import MonthlyFinance from '../models/MonthlyFinance.js'
 
 export const useFinanceStore = defineStore('finance', {
   state: () => ({
@@ -150,7 +151,23 @@ export const useFinanceStore = defineStore('finance', {
         this.categories = JSON.parse(categories)
       }
       if (monthlyFinances) {
-        this.monthlyFinances = JSON.parse(monthlyFinances)
+        const monthlyData = JSON.parse(monthlyFinances)
+        // 确保每个月度财务对象都有正确的结构和方法
+        this.monthlyFinances = monthlyData.map(item => {
+          const mf = new MonthlyFinance(item.month, item.income, item.expense, item.cumulativeNet)
+          // 确保allocated_amounts属性存在
+          if (item.allocated_amounts) {
+            mf.allocated_amounts = item.allocated_amounts
+          } else {
+            mf.allocated_amounts = {}
+          }
+          // 保留其他属性
+          if (item.transfers) mf.transfers = item.transfers
+          if (item.isArchived) mf.isArchived = item.isArchived
+          if (item.createdAt) mf.createdAt = item.createdAt
+          if (item.updatedAt) mf.updatedAt = item.updatedAt
+          return mf
+        })
       }
     },
 

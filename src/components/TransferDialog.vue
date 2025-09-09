@@ -16,11 +16,11 @@
       <div class="transfer-info">
         <div class="info-item">
           <span class="label">当前净收入:</span>
-          <span class="value">¥{{ formatAmount(currentNetIncome) }}</span>
+          <span class="value">¥{{ formatAmount(currentMonthFinance.netIncome || 0) }}</span>
         </div>
         <div class="info-item">
           <span class="label">已分配金额:</span>
-          <span class="value">¥{{ formatAmount(allocatedAmount) }}</span>
+          <span class="value">¥{{ formatAmount((currentMonthFinance.getAllocatedAmount && currentMonthFinance.getAllocatedAmount()) || 0) }}</span>
         </div>
         <div class="info-item">
           <span class="label">可用金额:</span>
@@ -176,20 +176,19 @@ export default {
 
     const currentMonthFinance = computed(() => {
       return financeStore.monthlyFinances.find(mf => mf.month === props.currentMonth) || 
-        { income: 0, expense: 0, netIncome: 0 }
-    })
-
-    const currentNetIncome = computed(() => {
-      return currentMonthFinance.value.income - currentMonthFinance.value.expense
-    })
-
-    const allocatedAmount = computed(() => {
-      return fundTransferStore.getTotalTransferredByMonth(props.currentMonth)
+        { income: 0, expense: 0, netIncome: 0, getAllocatedAmount: () => 0, getAvailableAmount: () => 0 }
     })
 
     const availableAmount = computed(() => {
-      if (form.value.fromType === 'net-income') {
-        return Math.max(0, currentNetIncome.value - allocatedAmount.value)
+      if (form.value.fromType === 'monthly_income') {
+        const finance = financeStore.monthlyFinances.find(mf => mf.month === props.currentMonth)
+        if (finance && typeof finance.getAvailableAmount === 'function') {
+          return finance.getAvailableAmount()
+        }
+        // 回退计算方法：净收入 - 已分配金额
+        const netIncome = finance?.netIncome || 0
+        const allocated = (finance?.allocated_amounts && Object.values(finance.allocated_amounts).reduce((sum, amount) => sum + amount, 0)) || 0
+        return Math.max(0, netIncome - allocated)
       }
       // 其他资金类型的可用金额需要单独计算，暂时返回0
       return 0
@@ -278,8 +277,7 @@ export default {
       visible,
       fromTypeOptions,
       toTypeOptions,
-      currentNetIncome,
-      allocatedAmount,
+      currentMonthFinance,
       availableAmount,
       maxAmount,
       formatAmount,

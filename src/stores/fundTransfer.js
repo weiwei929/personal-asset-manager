@@ -113,7 +113,10 @@ export const useFundTransferStore = defineStore('fundTransfer', {
           throw new Error(validation.errors.join(', '))
         }
 
-        // 添加到列表
+        // 执行实际的资产转换操作
+        await this.executeTransfer(transfer)
+
+        // 添加到转换记录列表
         this.transfers.push(transfer)
         
         // 保存到本地存储
@@ -125,6 +128,99 @@ export const useFundTransferStore = defineStore('fundTransfer', {
         throw error
       } finally {
         this.loading = false
+      }
+    },
+
+    /**
+     * 执行实际的资产转换操作
+     */
+    async executeTransfer(transfer) {
+      const { useFinanceStore } = await import('./finance.js')
+      const { useBankDepositStore } = await import('./bankDeposit.js')
+      const { useStockInvestmentStore } = await import('./stockInvestment.js')
+      const { useLentMoneyStore } = await import('./lentMoney.js')
+
+      const financeStore = useFinanceStore()
+      const bankDepositStore = useBankDepositStore()
+      const stockStore = useStockInvestmentStore()
+      const lentMoneyStore = useLentMoneyStore()
+
+      // 从月度余额中扣除
+      if (transfer.fromType === 'monthly_income') {
+        // 找到实际的月度财务对象
+        const currentMonth = transfer.month
+        const financeIndex = financeStore.monthlyFinances.findIndex(mf => mf.month === currentMonth)
+        
+        if (financeIndex === -1) {
+          throw new Error('当前月度财务记录不存在')
+        }
+
+        const currentFinance = financeStore.monthlyFinances[financeIndex]
+
+        // 检查可用余额
+        const availableAmount = currentFinance.getAvailableAmount ? currentFinance.getAvailableAmount() : 
+          (currentFinance.netIncome - (currentFinance.getAllocatedAmount ? currentFinance.getAllocatedAmount() : 0))
+        
+        if (transfer.amount > availableAmount) {
+          throw new Error('转换金额超过可用余额')
+        }
+
+        // 记录转换金额（从月度余额中减少）
+        if (!currentFinance.allocated_amounts) {
+          currentFinance.allocated_amounts = {}
+        }
+        
+        const currentAllocated = currentFinance.allocated_amounts[transfer.toType] || 0
+        currentFinance.allocated_amounts[transfer.toType] = currentAllocated + transfer.amount
+
+        // 保存更新
+        financeStore.saveToLocalStorage()
+      }
+
+      // 向目标资产类型中增加
+      switch (transfer.toType) {
+        case 'bank_deposit':
+          // 添加银行存款记录
+          await bankDepositStore.addDeposit({
+            bankName: '资金转换',
+            accountType: '转换存款',
+            amount: transfer.amount,
+            interestRate: 0,
+            startDate: transfer.date,
+            description: `从月度余额转换: ${transfer.description}`,
+            month: transfer.month
+          })
+          break
+
+        case 'stock_investment':
+          // 添加股票投资记录
+          await stockStore.addInvestment({
+            stockName: '资金转换',
+            stockCode: 'TRANSFER',
+            purchasePrice: 1,
+            quantity: transfer.amount,
+            totalAmount: transfer.amount,
+            purchaseDate: transfer.date,
+            description: `从月度余额转换: ${transfer.description}`,
+            month: transfer.month
+          })
+          break
+
+        case 'lent_money':
+          // 添加借出资金记录
+          await lentMoneyStore.addLentMoney({
+            borrowerName: '资金转换',
+            amount: transfer.amount,
+            lendDate: transfer.date,
+            expectedReturnDate: new Date(new Date(transfer.date).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 默认30天后
+            interestRate: 0,
+            description: `从月度余额转换: ${transfer.description}`,
+            month: transfer.month
+          })
+          break
+
+        default:
+          throw new Error(`不支持的转换目标类型: ${transfer.toType}`)
       }
     },
 
