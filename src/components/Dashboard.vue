@@ -198,6 +198,16 @@
             </el-button>
             
             <el-button 
+              type="warning" 
+              size="large" 
+              @click="showTransferDialog = true" 
+              class="quick-action-btn"
+            >
+              <el-icon><Sort /></el-icon>
+              <span>资金管理</span>
+            </el-button>
+            
+            <el-button 
               type="success" 
               size="large" 
               @click="$emit('openDialog', 'bankDeposit')" 
@@ -208,7 +218,7 @@
             </el-button>
             
             <el-button 
-              type="warning" 
+              type="info" 
               size="large" 
               @click="$emit('openDialog', 'stockInvestment')" 
               class="quick-action-btn"
@@ -218,7 +228,7 @@
             </el-button>
             
             <el-button 
-              type="info" 
+              type="danger" 
               size="large" 
               @click="$emit('openDialog', 'lentMoney')" 
               class="quick-action-btn"
@@ -230,16 +240,25 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 资金转换对话框 -->
+    <TransferDialog 
+      v-model="showTransferDialog"
+      :current-month="currentMonth"
+      @success="handleTransferSuccess"
+    />
   </div>
 </template>
 
 <script>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useFinanceStore } from '../stores/finance.js'
 import { useBankDepositStore } from '../stores/bankDeposit.js'
 import { useStockInvestmentStore } from '../stores/stockInvestment.js'
 import { useLentMoneyStore } from '../stores/lentMoney.js'
-import { Plus, Minus, Money, List, Coin, TrendCharts } from '@element-plus/icons-vue'
+import { useFundTransferStore } from '../stores/fundTransfer.js'
+import { Plus, Minus, Money, List, Coin, TrendCharts, Sort } from '@element-plus/icons-vue'
+import TransferDialog from './TransferDialog.vue'
 
 export default {
   name: 'FinanceDashboard',
@@ -249,13 +268,20 @@ export default {
     Money,
     List,
     Coin,
-    TrendCharts
+    TrendCharts,
+    Sort,
+    TransferDialog
   },
   setup() {
     const financeStore = useFinanceStore()
     const bankDepositStore = useBankDepositStore()
     const stockStore = useStockInvestmentStore()
     const lentMoneyStore = useLentMoneyStore()
+    const fundTransferStore = useFundTransferStore()
+
+    // 响应式数据
+    const showTransferDialog = ref(false)
+    const currentMonth = ref(new Date().toISOString().slice(0, 7))
 
     // 月度财务数据
     const currentMonthFinance = computed(() => financeStore.currentMonthFinance)
@@ -271,11 +297,18 @@ export default {
       return totalCumulativeNet.value + totalDepositAmount.value + totalInvestmentAssets.value - pendingAmount.value
     })
 
+    // 处理转换成功
+    const handleTransferSuccess = () => {
+      // 转换成功后可以刷新数据或显示提示
+      console.log('资金转换成功')
+    }
+
     onMounted(() => {
       financeStore.loadFromLocalStorage()
       bankDepositStore.loadFromLocalStorage()
       stockStore.loadFromLocalStorage()
       lentMoneyStore.loadFromLocalStorage()
+      fundTransferStore.loadFromLocalStorage()
     })
 
     return {
@@ -284,7 +317,10 @@ export default {
       totalDepositAmount,
       totalInvestmentAssets,
       pendingAmount,
-      totalAssets
+      totalAssets,
+      showTransferDialog,
+      currentMonth,
+      handleTransferSuccess
     }
   }
 }
@@ -592,26 +628,26 @@ export default {
 .quick-actions {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   padding: 8px 0;
 }
 
 .quick-action-btn {
-  height: 58px !important;
-  border-radius: 14px !important;
-  font-size: 16px !important;
+  height: 48px !important;
+  border-radius: 12px !important;
+  font-size: 15px !important;
   font-weight: 600 !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   border: none !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1) !important;
   width: 140px !important;
   min-width: 140px !important;
   max-width: 140px !important;
   position: relative !important;
   overflow: hidden !important;
-  letter-spacing: 0.5px !important;
+  letter-spacing: 0.3px !important;
   margin: 0 !important;
-  padding: 12px 19px !important;
+  padding: 10px 16px !important;
   box-sizing: border-box !important;
   flex-shrink: 0 !important;
 }

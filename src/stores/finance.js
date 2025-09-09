@@ -54,6 +54,20 @@ export const useFinanceStore = defineStore('finance', {
 
     totalCumulativeNet: (state) => {
       return state.monthlyFinances.reduce((sum, mf) => sum + (mf.income - mf.expense), 0)
+    },
+
+    // 资金转换相关计算属性
+    getCurrentMonthWithTransfers: (state) => {
+      const currentMonth = new Date().toISOString().slice(0, 7)
+      const monthlyFinance = state.monthlyFinances.find(mf => mf.month === currentMonth)
+      if (!monthlyFinance) return null
+      
+      // 这里需要从fundTransferStore获取转换记录，暂时返回基础信息
+      return {
+        ...monthlyFinance,
+        allocatedAmount: 0, // 将通过组件中调用fundTransferStore计算
+        availableAmount: monthlyFinance.income - monthlyFinance.expense // 基础可用金额
+      }
     }
   },
 

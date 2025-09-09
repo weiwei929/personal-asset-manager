@@ -1,9 +1,9 @@
 {
   "name": "personal-asset-manager",
-  "version": "0.1.0",
-  "description": "现代化的个人财务管理应用，专注于月度收支管理和多元化资产追踪",
+  "version": "0.2.0",
+  "description": "现代化的个人财务管理应用，专注于月度收支管理、多元化资产追踪和智能资金转换",
   "author": "Personal Asset Manager Team",
-  "keywords": ["vue", "finance", "asset-management", "personal-finance", "element-plus"],
+  "keywords": ["vue", "finance", "asset-management", "personal-finance", "element-plus", "fund-transfer"],
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",

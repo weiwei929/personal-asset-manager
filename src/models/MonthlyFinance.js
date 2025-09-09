@@ -7,6 +7,8 @@ export default class MonthlyFinance {
     this.expense = expense; // 当月支出
     this.netIncome = income - expense; // 月净收入
     this.cumulativeNet = cumulativeNet; // 累积净收入
+    this.transfers = []; // 资金转换记录ID列表
+    this.isArchived = false; // 是否已归档
     this.createdAt = new Date().toISOString();
     this.updatedAt = new Date().toISOString();
   }
@@ -51,5 +53,47 @@ export default class MonthlyFinance {
   calculateCumulative(previousCumulative = 0) {
     this.cumulativeNet = previousCumulative + this.netIncome;
     return this.cumulativeNet;
+  }
+
+  // 获取已分配的金额（从外部传入转换记录）
+  getAllocatedAmount(transfers = []) {
+    return transfers
+      .filter(transfer => transfer.month === this.month && transfer.fromType === 'net-income' && transfer.status === 'completed')
+      .reduce((sum, transfer) => sum + transfer.amount, 0);
+  }
+
+  // 获取可用于转换的金额
+  getAvailableAmount(transfers = []) {
+    const allocated = this.getAllocatedAmount(transfers);
+    return Math.max(0, this.netIncome - allocated);
+  }
+
+  // 获取转换统计（按目标类型分组）
+  getTransferSummary(transfers = []) {
+    const monthTransfers = transfers.filter(
+      transfer => transfer.month === this.month && transfer.fromType === 'net-income' && transfer.status === 'completed'
+    );
+    
+    const summary = {};
+    monthTransfers.forEach(transfer => {
+      if (!summary[transfer.toType]) {
+        summary[transfer.toType] = 0;
+      }
+      summary[transfer.toType] += transfer.amount;
+    });
+    
+    return summary;
+  }
+
+  // 检查是否可以进行指定金额的转换
+  canTransfer(amount, transfers = []) {
+    const available = this.getAvailableAmount(transfers);
+    return amount > 0 && amount <= available;
+  }
+
+  // 归档月度数据
+  archive() {
+    this.isArchived = true;
+    this.updatedAt = new Date().toISOString();
   }
 }
