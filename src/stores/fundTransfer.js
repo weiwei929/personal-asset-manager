@@ -146,7 +146,7 @@ export const useFundTransferStore = defineStore('fundTransfer', {
       const lentMoneyStore = useLentMoneyStore()
 
       // 从月度余额中扣除
-      if (transfer.fromType === 'monthly_income') {
+      if (transfer.fromType === 'net-income') {
         // 找到实际的月度财务对象
         const currentMonth = transfer.month
         const financeIndex = financeStore.monthlyFinances.findIndex(mf => mf.month === currentMonth)
@@ -181,15 +181,15 @@ export const useFundTransferStore = defineStore('fundTransfer', {
       switch (transfer.toType) {
         case 'bank_deposit':
           // 添加银行存款记录
-          await bankDepositStore.addDeposit({
-            bankName: '资金转换',
-            accountType: '转换存款',
-            amount: transfer.amount,
-            interestRate: 0,
-            startDate: transfer.date,
-            description: `从月度余额转换: ${transfer.description}`,
-            month: transfer.month
-          })
+          await bankDepositStore.addDeposit(
+            `转换存款-${transfer.date.slice(0, 10)}`,  // productName
+            new Date(new Date(transfer.date).getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // maturityDate (1年后)
+            transfer.amount,  // amount
+            0,  // interestRate
+            '1年',  // term
+            0,  // maturityInterest
+            `从月度余额转换: ${transfer.description}`  // notes
+          )
           break
 
         case 'stock_investment':

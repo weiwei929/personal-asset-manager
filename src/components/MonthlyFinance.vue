@@ -1,191 +1,225 @@
 <template>
-  <el-card class="monthly-finance">
-    <template #header>
-      <div class="card-header">
-        <span>月度收支管理</span>
-        <el-select v-model="selectedMonth" @change="loadMonthData" style="width: 120px;">
-          <el-option
+  <div class="p-6 space-y-6">
+    <!-- 页面头部 -->
+    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">月度收支管理</h1>
+        <select 
+          v-model="selectedMonth" 
+          @change="loadMonthData" 
+          class="px-3 py-2 bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+        >
+          <option
             v-for="month in availableMonths"
             :key="month.value"
-            :label="month.label"
             :value="month.value"
-          />
-        </el-select>
+          >
+            {{ month.label }}
+          </option>
+        </select>
       </div>
-    </template>
+    </div>
 
     <!-- 月度统计卡片 -->
-    <div class="stats-section">
-      <el-row :gutter="20">
-        <el-col :span="8">
-          <el-card class="stat-card income-card">
-            <div class="stat-content">
-              <div class="stat-icon">
-                <el-icon><Plus /></el-icon>
-              </div>
-              <div class="stat-info">
-                <div class="stat-value">¥{{ currentMonthFinance.income.toLocaleString() }}</div>
-                <div class="stat-label">当月收入</div>
-              </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      <!-- 当月收入 -->
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+              <svg class="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+              </svg>
             </div>
-          </el-card>
-        </el-col>
+          </div>
+          <div class="ml-4 flex-1">
+            <p class="text-sm font-medium text-subtext-light dark:text-subtext-dark">当月收入</p>
+            <p class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">¥{{ currentMonthFinance.income.toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
 
-        <el-col :span="8">
-          <el-card class="stat-card expense-card">
-            <div class="stat-content">
-              <div class="stat-icon">
-                <el-icon><Minus /></el-icon>
-              </div>
-              <div class="stat-info">
-                <div class="stat-value">¥{{ currentMonthFinance.expense.toLocaleString() }}</div>
-                <div class="stat-label">当月支出</div>
-              </div>
+      <!-- 当月支出 -->
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">
+              <svg class="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+              </svg>
             </div>
-          </el-card>
-        </el-col>
+          </div>
+          <div class="ml-4 flex-1">
+            <p class="text-sm font-medium text-subtext-light dark:text-subtext-dark">当月支出</p>
+            <p class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">¥{{ currentMonthFinance.expense.toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
 
-        <el-col :span="8">
-          <el-card class="stat-card net-card">
-            <div class="stat-content">
-              <div class="stat-icon">
-                <el-icon><Money /></el-icon>
-              </div>
-              <div class="stat-info">
-                <div class="stat-value" :class="currentMonthFinance.netIncome >= 0 ? 'positive' : 'negative'">
-                  ¥{{ currentMonthFinance.netIncome.toLocaleString() }}
-                </div>
-                <div class="stat-label">月净收入</div>
-              </div>
+      <!-- 月净收入 -->
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+              <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+              </svg>
             </div>
-          </el-card>
-        </el-col>
-      </el-row>
+          </div>
+          <div class="ml-4 flex-1">
+            <p class="text-sm font-medium text-subtext-light dark:text-subtext-dark">月净收入</p>
+            <p class="text-xl sm:text-2xl font-bold" :class="currentMonthFinance.netIncome >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+              ¥{{ currentMonthFinance.netIncome.toLocaleString() }}
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 累积净收入显示 -->
-    <el-alert
-      :title="`累积净收入: ¥${totalCumulativeNet.toLocaleString()}`"
-      type="info"
-      show-icon
-      :closable="false"
-      style="margin: 20px 0;"
-    />
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+      <div class="flex items-center">
+        <div class="flex-shrink-0">
+          <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </div>
+        <div class="ml-3">
+          <p class="text-sm font-medium text-blue-800 dark:text-blue-200">
+            累积净收入: ¥{{ totalCumulativeNet.toLocaleString() }}
+          </p>
+        </div>
+      </div>
+    </div>
 
     <!-- 收入支出录入表单 -->
-    <el-card style="margin-top: 20px;">
-      <template #header>
-        <span>录入{{ MonthlyFinance.formatMonth(selectedMonth) }}收支</span>
-      </template>
+    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+      <h3 class="text-lg font-semibold text-text-light dark:text-text-dark mb-6">
+        录入{{ MonthlyFinance.formatMonth(selectedMonth) }}收支
+      </h3>
 
-      <el-form :model="financeForm" :rules="financeRules" ref="financeFormRef" label-width="100px">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="当月收入" prop="income">
-              <el-input-number
-                v-model="financeForm.income"
-                :precision="2"
-                :min="0"
-                :max="99999999.99"
-                controls-position="right"
-                placeholder="请输入当月总收入"
-                style="width: 100%;"
-              />
-            </el-form-item>
-          </el-col>
+      <form @submit.prevent="saveMonthlyFinance" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              当月收入
+            </label>
+            <input
+              v-model.number="financeForm.income"
+              type="number"
+              step="0.01"
+              min="0"
+              max="99999999.99"
+              placeholder="请输入当月总收入"
+              class="w-full px-3 py-2 bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
 
-          <el-col :span="12">
-            <el-form-item label="当月支出" prop="expense">
-              <el-input-number
-                v-model="financeForm.expense"
-                :precision="2"
-                :min="0"
-                :max="99999999.99"
-                controls-position="right"
-                placeholder="请输入当月总支出"
-                style="width: 100%;"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              当月支出
+            </label>
+            <input
+              v-model.number="financeForm.expense"
+              type="number"
+              step="0.01"
+              min="0"
+              max="99999999.99"
+              placeholder="请输入当月总支出"
+              class="w-full px-3 py-2 bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+        </div>
 
-        <el-form-item>
-          <el-button type="primary" @click="saveMonthlyFinance" :loading="saving">
-            保存月度收支
-          </el-button>
-          <el-button @click="resetForm">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button
+            type="submit"
+            :disabled="saving"
+            class="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ saving ? '保存中...' : '保存月度收支' }}
+          </button>
+          <button
+            type="button"
+            @click="resetForm"
+            class="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors"
+          >
+            重置
+          </button>
+        </div>
+      </form>
+    </div>
 
     <!-- 月度历史记录 -->
-    <el-card style="margin-top: 20px;">
-      <template #header>
-        <span>月度收支历史</span>
-      </template>
+    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+      <h3 class="text-lg font-semibold text-text-light dark:text-text-dark mb-6">
+        月度收支历史
+      </h3>
 
-      <el-table :data="monthlyFinancesByMonth" style="width: 100%" stripe>
-        <el-table-column prop="month" label="月份" width="120">
-          <template #default="scope">
-            {{ MonthlyFinance.formatMonth(scope.row.month) }}
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="income" label="收入" width="120">
-          <template #default="scope">
-            ¥{{ scope.row.income.toLocaleString() }}
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="expense" label="支出" width="120">
-          <template #default="scope">
-            ¥{{ scope.row.expense.toLocaleString() }}
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="netIncome" label="净收入" width="120">
-          <template #default="scope">
-            <span :class="scope.row.netIncome >= 0 ? 'positive-text' : 'negative-text'">
-              ¥{{ scope.row.netIncome.toLocaleString() }}
-            </span>
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="cumulativeNet" label="累积净收入" width="140">
-          <template #default="scope">
-            <span :class="scope.row.cumulativeNet >= 0 ? 'positive-text' : 'negative-text'">
-              ¥{{ scope.row.cumulativeNet.toLocaleString() }}
-            </span>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="操作" width="100">
-          <template #default="scope">
-            <el-button size="small" @click="editMonth(scope.row)">编辑</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-  </el-card>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-border-light dark:border-border-dark">
+              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">月份</th>
+              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">收入</th>
+              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">支出</th>
+              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">净收入</th>
+              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">累积净收入</th>
+              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr 
+              v-for="(row, index) in monthlyFinancesByMonth" 
+              :key="row.month"
+              :class="index % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/50' : 'bg-white dark:bg-gray-900'"
+              class="border-b border-border-light dark:border-border-dark last:border-b-0"
+            >
+              <td class="py-3 px-4 text-sm text-text-light dark:text-text-dark">
+                {{ MonthlyFinance.formatMonth(row.month) }}
+              </td>
+              <td class="py-3 px-4 text-sm text-text-light dark:text-text-dark">
+                ¥{{ row.income.toLocaleString() }}
+              </td>
+              <td class="py-3 px-4 text-sm text-text-light dark:text-text-dark">
+                ¥{{ row.expense.toLocaleString() }}
+              </td>
+              <td class="py-3 px-4 text-sm">
+                <span :class="row.netIncome >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+                  ¥{{ row.netIncome.toLocaleString() }}
+                </span>
+              </td>
+              <td class="py-3 px-4 text-sm">
+                <span :class="row.cumulativeNet >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+                  ¥{{ row.cumulativeNet.toLocaleString() }}
+                </span>
+              </td>
+              <td class="py-3 px-4">
+                <button 
+                  @click="editMonth(row)"
+                  class="px-3 py-1 text-sm bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors"
+                >
+                  编辑
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Minus, Money } from '@element-plus/icons-vue'
 import { useFinanceStore } from '../stores/finance.js'
 import MonthlyFinance from '../models/MonthlyFinance.js'
 
 export default {
   name: 'MonthlyFinance',
-  components: {
-    Plus,
-    Minus,
-    Money
-  },
   setup() {
     const financeStore = useFinanceStore()
-    const financeFormRef = ref(null)
     const saving = ref(false)
 
     const selectedMonth = ref(MonthlyFinance.getCurrentMonth())
@@ -194,11 +228,6 @@ export default {
       income: 0,
       expense: 0
     })
-
-    const financeRules = {
-      income: [{ required: true, message: '请输入当月收入', trigger: 'blur' }],
-      expense: [{ required: true, message: '请输入当月支出', trigger: 'blur' }]
-    }
 
     // 计算属性
     const currentMonthFinance = computed(() => financeStore.currentMonthFinance)
@@ -238,21 +267,25 @@ export default {
     }
 
     const saveMonthlyFinance = async () => {
-      if (!financeFormRef.value) return
+      // 简单验证
+      if (financeForm.value.income < 0 || financeForm.value.expense < 0) {
+        ElMessage.error('收入和支出不能为负数')
+        return
+      }
 
       try {
-        await financeFormRef.value.validate()
         saving.value = true
 
         financeStore.updateMonthlyFinance(
           selectedMonth.value,
-          financeForm.value.income,
-          financeForm.value.expense
+          financeForm.value.income || 0,
+          financeForm.value.expense || 0
         )
 
         ElMessage.success('月度收支保存成功')
       } catch (error) {
-        console.error('表单验证失败:', error)
+        console.error('保存失败:', error)
+        ElMessage.error('保存失败，请重试')
       } finally {
         saving.value = false
       }
@@ -271,7 +304,6 @@ export default {
         income: 0,
         expense: 0
       }
-      financeFormRef.value?.clearValidate()
     }
 
     onMounted(() => {
@@ -282,8 +314,6 @@ export default {
     return {
       selectedMonth,
       financeForm,
-      financeRules,
-      financeFormRef,
       saving,
       currentMonthFinance,
       monthlyFinancesByMonth,

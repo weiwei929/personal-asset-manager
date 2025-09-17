@@ -1,179 +1,306 @@
 <template>
-  <el-card class="bank-deposit-list">
-    <template #header>
-      <div class="card-header">
-        <span>银行存款列表</span>
-        <div class="header-actions">
-          <el-button type="primary" size="small" @click="showImportDialog = true">
+  <div class="p-6 space-y-6">
+    <!-- 页面头部 -->
+    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">银行存款列表</h1>
+        <div class="flex flex-wrap gap-2">
+          <button 
+            @click="showImportDialog = true"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+          >
             导入CSV
-          </el-button>
-          <el-button type="success" size="small" @click="showAddDialog = true">
+          </button>
+          <button 
+            @click="showAddDialog = true"
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm"
+          >
             新增存款
-          </el-button>
-          <el-button type="danger" size="small" @click="clearAllDeposits" v-if="deposits.length > 0">
+          </button>
+          <button 
+            v-if="deposits.length > 0"
+            @click="clearAllDeposits"
+            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
+          >
             清空数据
-          </el-button>
+          </button>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- 统计信息 -->
-    <div class="stats-section">
-      <el-row :gutter="20">
-        <el-col :span="24" :sm="12" :md="6">
-          <el-statistic title="总存款金额" :value="totalDepositAmount" prefix="¥" />
-        </el-col>
-        <el-col :span="24" :sm="12" :md="6">
-          <el-statistic title="预期利息收益" :value="totalExpectedInterest" prefix="¥" />
-        </el-col>
-        <el-col :span="24" :sm="12" :md="6">
-          <el-statistic title="即将到期" :value="maturingDeposits.length" suffix="笔" />
-        </el-col>
-        <el-col :span="24" :sm="12" :md="6">
-          <el-statistic title="已到期" :value="maturedDeposits.length" suffix="笔" />
-        </el-col>
-      </el-row>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">总存款金额</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">¥{{ totalDepositAmount.toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">预期利息收益</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">¥{{ totalExpectedInterest.toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">即将到期</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">{{ maturingDeposits.length }} 笔</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-red-100 dark:bg-red-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">已到期</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">{{ maturedDeposits.length }} 笔</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 到期提醒 -->
-    <el-alert
-      v-if="maturingDeposits.length > 0"
-      title="到期提醒"
-      :description="`有 ${maturingDeposits.length} 笔存款将在30天内到期，请及时处理`"
-      type="warning"
-      show-icon
-      :closable="false"
-      style="margin: 20px 0;"
-    />
+    <div v-if="maturingDeposits.length > 0" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
+      <div class="flex items-center">
+        <div class="flex-shrink-0">
+          <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+          </svg>
+        </div>
+        <div class="ml-3">
+          <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200">到期提醒</h3>
+          <p class="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+            有 {{ maturingDeposits.length }} 笔存款将在30天内到期，请及时处理
+          </p>
+        </div>
+      </div>
+    </div>
 
     <!-- 操作面板 -->
-    <div class="action-panel" v-if="deposits.length > 0">
-      <el-row :gutter="20">
-        <el-col :span="24" :sm="12" :md="6">
-          <el-button type="primary" size="large" @click="showAddDialog = true" block>
-            <el-icon><Plus /></el-icon>
-            新增存款
-          </el-button>
-        </el-col>
-        <el-col :span="24" :sm="12" :md="6">
-          <el-button type="success" size="large" @click="showImportDialog = true" block>
-            <el-icon><Upload /></el-icon>
-            导入CSV
-          </el-button>
-        </el-col>
-        <el-col :span="24" :sm="12" :md="6">
-          <el-button type="info" size="large" @click="exportData" block>
-            <el-icon><Download /></el-icon>
-            导出数据
-          </el-button>
-        </el-col>
-        <el-col :span="24" :sm="12" :md="6">
-          <el-button type="warning" size="large" @click="clearAllDeposits" block>
-            <el-icon><Delete /></el-icon>
-            清空数据
-          </el-button>
-        </el-col>
-      </el-row>
+    <div v-if="deposits.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <button 
+        @click="showAddDialog = true"
+        class="flex items-center justify-center gap-2 px-6 py-4 bg-primary hover:bg-primary-dark text-white rounded-xl transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        新增存款
+      </button>
+      
+      <button 
+        @click="showImportDialog = true"
+        class="flex items-center justify-center gap-2 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+        </svg>
+        导入CSV
+      </button>
+      
+      <button 
+        @click="exportData"
+        class="flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        导出数据
+      </button>
+      
+      <button 
+        @click="clearAllDeposits"
+        class="flex items-center justify-center gap-2 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+        </svg>
+        清空数据
+      </button>
     </div>
 
     <!-- 存款列表 -->
-    <div v-if="deposits.length === 0" class="empty-state">
-      <el-empty description="暂无存款数据">
-        <template #image>
-          <el-button type="primary" @click="showAddDialog = true">添加第一笔存款</el-button>
-        </template>
-      </el-empty>
+    <div v-if="deposits.length === 0" class="unified-empty-state">
+      <div class="empty-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+        </svg>
+      </div>
+      <h3 class="empty-title">暂无存款数据</h3>
+      <p class="empty-description">开始添加您的第一笔银行存款记录</p>
+      <button class="empty-action" @click="showAddDialog = true">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
+        </svg>
+        添加第一笔存款
+      </button>
     </div>
 
-    <div v-else class="table-container">
+    <div v-else class="bg-card-light dark:bg-card-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark overflow-hidden">
+      <div class="px-4 py-3 border-b border-border-light dark:border-border-dark">
+        <h3 class="text-lg font-semibold text-text-light dark:text-text-dark">存款记录</h3>
+      </div>
+      
       <!-- 桌面端表格 -->
-      <el-table :data="depositsByMaturity" style="width: 100%" stripe class="desktop-table">
-        <el-table-column prop="productName" label="产品名称" width="150" />
-        <el-table-column prop="maturityDate" label="到期时间" width="120">
-          <template #default="scope">
-            {{ formatDate(scope.row.maturityDate) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="amount" label="存款金额" width="120">
-          <template #default="scope">
-            ¥{{ scope.row.amount.toLocaleString() }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="interestRate" label="利率" width="80">
-          <template #default="scope">
-            {{ scope.row.interestRate }}%
-          </template>
-        </el-table-column>
-        <el-table-column prop="term" label="存期" width="80" />
-        <el-table-column prop="maturityInterest" label="到期利息" width="120">
-          <template #default="scope">
-            ¥{{ scope.row.maturityInterest.toLocaleString() }}
-          </template>
-        </el-table-column>
-        <el-table-column label="到期状态" width="120">
-          <template #default="scope">
-            <el-tag :color="scope.row.getStatusColor()">
-              {{ scope.row.getMaturityStatus() }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="notes" label="备注" />
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="scope">
-            <el-button size="small" @click="editDeposit(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteDeposit(scope.row.id)">
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="overflow-x-auto hidden md:block">
+        <table class="w-full">
+          <thead class="bg-gray-50 dark:bg-gray-800">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">产品名称</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">到期时间</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">存款金额</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">利率</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">存期</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">到期利息</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">到期状态</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">备注</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border-light dark:divide-border-dark">
+            <tr 
+              v-for="(deposit, index) in depositsByMaturity" 
+              :key="deposit.id"
+              :class="index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'"
+              class="hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <td class="px-4 py-3 text-sm font-medium text-text-light dark:text-text-dark">{{ deposit.productName }}</td>
+              <td class="px-4 py-3 text-sm text-text-light dark:text-text-dark">{{ formatDate(deposit.maturityDate) }}</td>
+              <td class="px-4 py-3 text-sm font-semibold text-green-600 dark:text-green-400">¥{{ deposit.amount.toLocaleString() }}</td>
+              <td class="px-4 py-3 text-sm text-text-light dark:text-text-dark">{{ deposit.interestRate }}%</td>
+              <td class="px-4 py-3 text-sm text-text-light dark:text-text-dark">{{ deposit.term }}</td>
+              <td class="px-4 py-3 text-sm font-semibold text-blue-600 dark:text-blue-400">¥{{ deposit.maturityInterest.toLocaleString() }}</td>
+              <td class="px-4 py-3 text-sm">
+                <span 
+                  :class="{
+                    'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': deposit.getMaturityStatus() === '已到期',
+                    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': deposit.getMaturityStatus() === '即将到期',
+                    'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200': deposit.getMaturityStatus() === '未到期'
+                  }"
+                  class="px-2 py-1 text-xs font-medium rounded-full"
+                >
+                  {{ deposit.getMaturityStatus() }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-sm text-text-light dark:text-text-dark">{{ deposit.notes || '-' }}</td>
+              <td class="px-4 py-3 text-sm">
+                <div class="flex space-x-2">
+                  <button 
+                    @click="editDeposit(deposit)"
+                    class="px-3 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md transition-colors"
+                  >
+                    编辑
+                  </button>
+                  <button 
+                    @click="deleteDeposit(deposit.id)"
+                    class="px-3 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-md transition-colors"
+                  >
+                    删除
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <!-- 移动端卡片列表 -->
-      <div class="mobile-cards">
+      <div class="md:hidden space-y-4 p-4">
         <div 
           v-for="deposit in depositsByMaturity" 
           :key="deposit.id" 
-          class="deposit-card"
+          class="bg-white dark:bg-gray-800 rounded-lg border border-border-light dark:border-border-dark shadow-sm p-4"
         >
-          <div class="card-header-mobile">
-            <h4 class="product-name">{{ deposit.productName }}</h4>
-            <el-tag :color="deposit.getStatusColor()" size="small">
+          <div class="flex justify-between items-start mb-3">
+            <h4 class="text-lg font-semibold text-text-light dark:text-text-dark">{{ deposit.productName }}</h4>
+            <span 
+              :class="{
+                'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': deposit.getMaturityStatus() === '已到期',
+                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200': deposit.getMaturityStatus() === '即将到期',
+                'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200': deposit.getMaturityStatus() === '未到期'
+              }"
+              class="px-2 py-1 text-xs font-medium rounded-full"
+            >
               {{ deposit.getMaturityStatus() }}
-            </el-tag>
+            </span>
           </div>
           
-          <div class="card-content">
-            <div class="info-row">
-              <span class="label">存款金额:</span>
-              <span class="value amount">¥{{ deposit.amount.toLocaleString() }}</span>
+          <div class="space-y-2 mb-4">
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-500 dark:text-gray-400">存款金额:</span>
+              <span class="text-sm font-semibold text-green-600 dark:text-green-400">¥{{ deposit.amount.toLocaleString() }}</span>
             </div>
-            <div class="info-row">
-              <span class="label">利率:</span>
-              <span class="value">{{ deposit.interestRate }}%</span>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-500 dark:text-gray-400">利率:</span>
+              <span class="text-sm text-text-light dark:text-text-dark">{{ deposit.interestRate }}%</span>
             </div>
-            <div class="info-row">
-              <span class="label">存期:</span>
-              <span class="value">{{ deposit.term }}</span>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-500 dark:text-gray-400">存期:</span>
+              <span class="text-sm text-text-light dark:text-text-dark">{{ deposit.term }}</span>
             </div>
-            <div class="info-row">
-              <span class="label">到期时间:</span>
-              <span class="value">{{ formatDate(deposit.maturityDate) }}</span>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-500 dark:text-gray-400">到期时间:</span>
+              <span class="text-sm text-text-light dark:text-text-dark">{{ formatDate(deposit.maturityDate) }}</span>
             </div>
-            <div class="info-row">
-              <span class="label">到期利息:</span>
-              <span class="value">¥{{ deposit.maturityInterest.toLocaleString() }}</span>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-500 dark:text-gray-400">到期利息:</span>
+              <span class="text-sm font-semibold text-blue-600 dark:text-blue-400">¥{{ deposit.maturityInterest.toLocaleString() }}</span>
             </div>
-            <div v-if="deposit.notes" class="info-row">
-              <span class="label">备注:</span>
-              <span class="value">{{ deposit.notes }}</span>
+            <div v-if="deposit.notes" class="flex justify-between">
+              <span class="text-sm text-gray-500 dark:text-gray-400">备注:</span>
+              <span class="text-sm text-text-light dark:text-text-dark">{{ deposit.notes }}</span>
             </div>
           </div>
           
-          <div class="card-actions">
-            <el-button size="small" @click="editDeposit(deposit)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteDeposit(deposit.id)">
+          <div class="flex space-x-2 pt-3 border-t border-border-light dark:border-border-dark">
+            <button 
+              @click="editDeposit(deposit)"
+              class="flex-1 px-3 py-2 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md transition-colors"
+            >
+              编辑
+            </button>
+            <button 
+              @click="deleteDeposit(deposit.id)"
+              class="flex-1 px-3 py-2 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-md transition-colors"
+            >
               删除
-            </el-button>
+            </button>
           </div>
         </div>
       </div>
@@ -210,88 +337,149 @@
     </el-dialog>
 
     <!-- 新增/编辑存款对话框 -->
-    <el-dialog v-model="showAddDialog" :title="isEditing ? '编辑存款' : '新增存款'" width="600px">
-      <el-form :model="depositForm" :rules="depositRules" ref="depositFormRef" label-width="100px">
-        <el-form-item label="产品名称" prop="productName">
-          <el-input v-model="depositForm.productName" placeholder="例如：长财40708" />
-        </el-form-item>
-        <el-form-item label="到期时间" prop="maturityDate">
-          <el-date-picker
-            v-model="depositForm.maturityDate"
-            type="date"
-            placeholder="选择到期日期"
-            format="YYYY年MM月DD日"
-            value-format="YYYY年MM月DD日"
-          />
-        </el-form-item>
-        <el-form-item label="存款金额" prop="amount">
-          <el-input-number
-            v-model="depositForm.amount"
-            :precision="2"
-            :min="0.01"
-            :max="99999999.99"
-            controls-position="right"
-            placeholder="请输入存款金额"
-            style="width: 100%;"
-          />
-        </el-form-item>
-        <el-form-item label="利率" prop="interestRate">
-          <el-input-number
-            v-model="depositForm.interestRate"
-            :precision="2"
-            :min="0"
-            :max="10"
-            controls-position="right"
-            placeholder="例如：3.5"
-            style="width: 100%;"
-          />
-        </el-form-item>
-        <el-form-item label="存期" prop="term">
-          <el-input v-model="depositForm.term" placeholder="例如：3年" />
-        </el-form-item>
-        <el-form-item label="到期利息" prop="maturityInterest">
-          <el-input-number
-            v-model="depositForm.maturityInterest"
-            :precision="2"
-            :min="0"
-            controls-position="right"
-            placeholder="自动计算或手动输入"
-            style="width: 100%;"
-          />
-        </el-form-item>
-        <el-form-item label="备注" prop="notes">
-          <el-input
-            v-model="depositForm.notes"
-            type="textarea"
-            placeholder="备注信息"
-            :rows="3"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveDeposit">
-          {{ isEditing ? '更新' : '保存' }}
-        </el-button>
-      </template>
-    </el-dialog>
-  </el-card>
+    <div v-if="showAddDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+            {{ isEditing ? '编辑存款' : '新增存款' }}
+          </h3>
+          <button
+            @click="showAddDialog = false"
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6">
+          <form @submit.prevent="saveDeposit" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                产品名称 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model="depositForm.productName"
+                type="text"
+                placeholder="例如：长财40708"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                到期时间 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model="depositForm.maturityDate"
+                type="date"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                存款金额 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model="depositForm.amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                max="99999999.99"
+                placeholder="请输入存款金额"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                利率 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model="depositForm.interestRate"
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                placeholder="例如：3.5"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                存期 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model="depositForm.term"
+                type="text"
+                placeholder="例如：3年"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                到期利息
+              </label>
+              <input
+                v-model="depositForm.maturityInterest"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="自动计算或手动输入"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                备注
+              </label>
+              <textarea
+                v-model="depositForm.notes"
+                placeholder="备注信息"
+                rows="3"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              ></textarea>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                @click="showAddDialog = false"
+                class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                {{ isEditing ? '更新' : '保存' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, Download, Delete } from '@element-plus/icons-vue'
 import { useBankDepositStore } from '../stores/bankDeposit.js'
 
 export default {
   name: 'BankDepositList',
-  components: {
-    Plus,
-    Upload,
-    Download,
-    Delete
-  },
   setup() {
     const bankDepositStore = useBankDepositStore()
     const showImportDialog = ref(false)
@@ -301,7 +489,6 @@ export default {
     const importResult = ref(null)
     const selectedFile = ref(null)
     const uploadRef = ref(null)
-    const depositFormRef = ref(null)
 
     const depositForm = ref({
       id: null,
@@ -313,14 +500,6 @@ export default {
       maturityInterest: null,
       notes: ''
     })
-
-    const depositRules = {
-      productName: [{ required: true, message: '请输入产品名称', trigger: 'blur' }],
-      maturityDate: [{ required: true, message: '请选择到期时间', trigger: 'change' }],
-      amount: [{ required: true, message: '请输入存款金额', trigger: 'blur' }],
-      interestRate: [{ required: true, message: '请输入利率', trigger: 'blur' }],
-      term: [{ required: true, message: '请输入存期', trigger: 'blur' }]
-    }
 
     // 计算属性
     const deposits = computed(() => bankDepositStore.deposits)
@@ -375,11 +554,24 @@ export default {
     }
 
     const saveDeposit = async () => {
-      if (!depositFormRef.value) return
+      // 简单验证必填字段
+      if (!depositForm.value.productName || !depositForm.value.maturityDate || 
+          !depositForm.value.amount || !depositForm.value.interestRate || !depositForm.value.term) {
+        ElMessage.error('请填写所有必填字段')
+        return
+      }
+
+      if (depositForm.value.amount <= 0) {
+        ElMessage.error('存款金额必须大于0')
+        return
+      }
+
+      if (depositForm.value.interestRate < 0 || depositForm.value.interestRate > 10) {
+        ElMessage.error('利率必须在0-10之间')
+        return
+      }
 
       try {
-        await depositFormRef.value.validate()
-
         if (isEditing.value) {
           bankDepositStore.updateDeposit(depositForm.value.id, depositForm.value)
           ElMessage.success('存款信息更新成功')
@@ -399,7 +591,8 @@ export default {
         showAddDialog.value = false
         resetForm()
       } catch (error) {
-        console.error('表单验证失败:', error)
+        console.error('保存失败:', error)
+        ElMessage.error('保存失败，请重试')
       }
     }
 
@@ -487,9 +680,6 @@ export default {
         notes: ''
       }
       isEditing.value = false
-      if (depositFormRef.value) {
-        depositFormRef.value.clearValidate()
-      }
     }
 
     onMounted(() => {
@@ -511,8 +701,6 @@ export default {
       selectedFile,
       uploadRef,
       depositForm,
-      depositRules,
-      depositFormRef,
       formatDate,
       handleFileChange,
       importCSV,

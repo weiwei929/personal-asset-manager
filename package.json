@@ -1,14 +1,25 @@
 {
   "name": "personal-asset-manager",
-  "version": "0.2.0",
-  "description": "现代化的个人财务管理应用，专注于月度收支管理、多元化资产追踪和智能资金转换",
+  "version": "0.2.1",
+  "description": "现代化的个人财务管理应用，专注于月度收支管理、多元化资产追踪和智能资金转换，具备优化的导航体验和直观的操作界面",
   "author": "Personal Asset Manager Team",
-  "keywords": ["vue", "finance", "asset-management", "personal-finance", "element-plus", "fund-transfer"],
+  "keywords": [
+    "vue",
+    "finance",
+    "asset-management",
+    "personal-finance",
+    "element-plus",
+    "fund-transfer"
+  ],
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "lint": "vue-cli-service lint",
+    "build:prod": "vue-cli-service build --mode production",
+    "preview": "npm run build && npx serve dist",
+    "deploy:prepare": "node scripts/deploy-prepare.js",
+    "clean": "rimraf dist"
   },
   "dependencies": {
     "core-js": "^3.8.3",
@@ -22,8 +33,11 @@
     "@vue/cli-plugin-babel": "~5.0.0",
     "@vue/cli-plugin-eslint": "~5.0.0",
     "@vue/cli-service": "~5.0.0",
+    "autoprefixer": "^10.4.21",
     "eslint": "^7.32.0",
-    "eslint-plugin-vue": "^8.7.1"
+    "eslint-plugin-vue": "^8.7.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17"
   },
   "eslintConfig": {
     "root": true,

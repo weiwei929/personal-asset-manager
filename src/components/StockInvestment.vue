@@ -1,206 +1,287 @@
 <template>
-  <el-card class="stock-investment">
-    <template #header>
-      <div class="card-header">
-        <span>股票投资管理</span>
-        <div class="header-actions">
-          <el-button type="success" size="small" @click="showAddDialog = true">
+  <div class="p-6 space-y-6">
+    <!-- 页面头部 -->
+    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">股票投资管理</h1>
+        <div class="flex flex-wrap gap-2">
+          <button 
+            @click="showAddDialog = true"
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm"
+          >
+            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
             新增股票
-          </el-button>
-          <el-button type="danger" size="small" @click="clearAllStocks" v-if="stocks.length > 0">
+          </button>
+          <button 
+            v-if="stocks.length > 0"
+            @click="clearAllStocks"
+            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
+          >
+            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
             清空数据
-          </el-button>
+          </button>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- 投资统计卡片 -->
-    <div class="stats-section">
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-card class="stat-card">
-            <div class="stat-content">
-              <div class="stat-icon market-icon">
-                <el-icon><TrendCharts /></el-icon>
-              </div>
-              <div class="stat-info">
-                <div class="stat-value">¥{{ totalMarketValue.toLocaleString() }}</div>
-                <div class="stat-label">总市值</div>
-              </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              </svg>
             </div>
-          </el-card>
-        </el-col>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">总市值</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">¥{{ totalMarketValue.toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
 
-        <el-col :span="6">
-          <el-card class="stat-card">
-            <div class="stat-content">
-              <div class="stat-icon balance-icon">
-                <el-icon><Money /></el-icon>
-              </div>
-              <div class="stat-info">
-                <div class="stat-value">¥{{ totalAccountBalance.toLocaleString() }}</div>
-                <div class="stat-label">账户余额</div>
-              </div>
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+              </svg>
             </div>
-          </el-card>
-        </el-col>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">账户余额</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">¥{{ totalAccountBalance.toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
 
-        <el-col :span="6">
-          <el-card class="stat-card">
-            <div class="stat-content">
-              <div class="stat-icon total-icon">
-                <el-icon><Coin /></el-icon>
-              </div>
-              <div class="stat-info">
-                <div class="stat-value">¥{{ totalInvestmentAssets.toLocaleString() }}</div>
-                <div class="stat-label">总投资资产</div>
-              </div>
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+              </svg>
             </div>
-          </el-card>
-        </el-col>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">总投资资产</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">¥{{ totalInvestmentAssets.toLocaleString() }}</p>
+          </div>
+        </div>
+      </div>
 
-        <el-col :span="6">
-          <el-card class="stat-card">
-            <div class="stat-content">
-              <div class="stat-icon count-icon">
-                <el-icon><List /></el-icon>
-              </div>
-              <div class="stat-info">
-                <div class="stat-value">{{ stockCount }}</div>
-                <div class="stat-label">股票数量</div>
-              </div>
+      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-8 h-8 bg-orange-100 dark:bg-orange-900/50 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+              </svg>
             </div>
-          </el-card>
-        </el-col>
-      </el-row>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">股票数量</p>
+            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">{{ stockCount }}</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 股票列表 -->
-    <div v-if="stocks.length === 0" class="empty-state">
-      <el-empty description="暂无股票投资数据">
-        <template #image>
-          <el-button type="primary" @click="showAddDialog = true">添加第一只股票</el-button>
-        </template>
-      </el-empty>
-    </div>
+    <div class="bg-card-light dark:bg-card-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark">
+      <div v-if="stocks.length === 0" class="unified-empty-state">
+        <div class="empty-icon">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+          </svg>
+        </div>
+        <h3 class="empty-title">暂无股票数据</h3>
+        <p class="empty-description">开始添加您的第一支股票投资记录</p>
+        <button class="empty-action" @click="showAddDialog = true">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
+          </svg>
+          添加第一支股票
+        </button>
+      </div>
 
-    <div v-else>
-      <el-table :data="stocksByValue" style="width: 100%" stripe>
-        <el-table-column prop="name" label="股票名称" width="150" />
-        <el-table-column prop="currentValue" label="当月市值" width="150">
-          <template #default="scope">
-            ¥{{ scope.row.currentValue.toLocaleString() }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="accountBalance" label="账户余额" width="150">
-          <template #default="scope">
-            ¥{{ scope.row.accountBalance.toLocaleString() }}
-          </template>
-        </el-table-column>
-        <el-table-column label="总资产" width="150">
-          <template #default="scope">
-            ¥{{ scope.row.getTotalAssets().toLocaleString() }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="shares" label="持股数量" width="120" v-if="hasSharesData">
-          <template #default="scope">
-            {{ scope.row.shares ? scope.row.shares.toLocaleString() : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="市值占比" width="100">
-          <template #default="scope">
-            {{ getValuePercentage(scope.row.currentValue) }}%
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="scope">
-            <el-button size="small" @click="editStock(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteStock(scope.row.id)">
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div v-else class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50 dark:bg-gray-800/50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">股票名称</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">当月市值</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">账户余额</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">总资产</th>
+              <th v-if="hasSharesData" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">持股数量</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">市值占比</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            <tr v-for="stock in stocksByValue" :key="stock.id" class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-text-light dark:text-text-dark">{{ stock.name }}</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-text-light dark:text-text-dark">¥{{ stock.currentValue.toLocaleString() }}</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-text-light dark:text-text-dark">¥{{ stock.accountBalance.toLocaleString() }}</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-text-light dark:text-text-dark">¥{{ stock.getTotalAssets().toLocaleString() }}</div>
+              </td>
+              <td v-if="hasSharesData" class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-text-light dark:text-text-dark">{{ stock.shares ? stock.shares.toLocaleString() : '-' }}</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200">
+                  {{ getValuePercentage(stock.currentValue) }}%
+                </span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <div class="flex justify-end gap-2">
+                  <button 
+                    @click="editStock(stock)"
+                    class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                  >
+                    编辑
+                  </button>
+                  <button 
+                    @click="deleteStock(stock.id)"
+                    class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                  >
+                    删除
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- 新增/编辑股票对话框 -->
-    <el-dialog v-model="showAddDialog" :title="isEditing ? '编辑股票' : '新增股票'" width="600px">
-      <el-form :model="stockForm" :rules="stockRules" ref="stockFormRef" label-width="100px">
-        <el-form-item label="股票名称" prop="name">
-          <el-input v-model="stockForm.name" placeholder="例如：平安银行" />
-        </el-form-item>
+    <div v-if="showAddDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div class="bg-card-light dark:bg-card-dark rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-semibold text-text-light dark:text-text-dark">
+              {{ isEditing ? '编辑股票' : '新增股票' }}
+            </h3>
+            <button 
+              @click="showAddDialog = false"
+              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="当月市值" prop="currentValue">
-              <el-input-number
-                v-model="stockForm.currentValue"
-                :precision="2"
-                :min="0"
-                :max="99999999.99"
-                controls-position="right"
-                placeholder="请输入当月市值"
-                style="width: 100%;"
+          <form @submit.prevent="saveStock" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                股票名称 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model="stockForm.name"
+                type="text"
+                placeholder="例如：平安银行"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
               />
-            </el-form-item>
-          </el-col>
+            </div>
 
-          <el-col :span="12">
-            <el-form-item label="账户余额" prop="accountBalance">
-              <el-input-number
-                v-model="stockForm.accountBalance"
-                :precision="2"
-                :min="0"
-                :max="99999999.99"
-                controls-position="right"
-                placeholder="请输入账户余额"
-                style="width: 100%;"
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                  当月市值 <span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model.number="stockForm.currentValue"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="99999999.99"
+                  placeholder="请输入当月市值"
+                  class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                  账户余额 <span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model.number="stockForm.accountBalance"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="99999999.99"
+                  placeholder="请输入账户余额"
+                  class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                持股数量
+              </label>
+              <input
+                v-model.number="stockForm.shares"
+                type="number"
+                min="0"
+                placeholder="可选，持股数量"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               />
-            </el-form-item>
-          </el-col>
-        </el-row>
+            </div>
 
-        <el-form-item label="持股数量" prop="shares">
-          <el-input-number
-            v-model="stockForm.shares"
-            :precision="0"
-            :min="0"
-            controls-position="right"
-            placeholder="可选，持股数量"
-            style="width: 100%;"
-          />
-        </el-form-item>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveStock">
-          {{ isEditing ? '更新' : '保存' }}
-        </el-button>
-      </template>
-    </el-dialog>
-  </el-card>
+            <div class="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                @click="showAddDialog = false"
+                class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                {{ isEditing ? '更新' : '保存' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { TrendCharts, Money, Coin, List } from '@element-plus/icons-vue'
 import { useStockInvestmentStore } from '../stores/stockInvestment.js'
 
 export default {
   name: 'StockInvestment',
-  components: {
-    TrendCharts,
-    Money,
-    Coin,
-    List
-  },
   setup() {
     const stockStore = useStockInvestmentStore()
     const showAddDialog = ref(false)
     const isEditing = ref(false)
-    const stockFormRef = ref(null)
 
     const stockForm = ref({
       id: null,
@@ -209,12 +290,6 @@ export default {
       accountBalance: null,
       shares: null
     })
-
-    const stockRules = {
-      name: [{ required: true, message: '请输入股票名称', trigger: 'blur' }],
-      currentValue: [{ required: true, message: '请输入当月市值', trigger: 'blur' }],
-      accountBalance: [{ required: true, message: '请输入账户余额', trigger: 'blur' }]
-    }
 
     // 计算属性
     const stocks = computed(() => stockStore.stocks)
@@ -232,10 +307,12 @@ export default {
     }
 
     const saveStock = async () => {
-      if (!stockFormRef.value) return
-
       try {
-        await stockFormRef.value.validate()
+        // 简单的表单验证
+        if (!stockForm.value.name || !stockForm.value.currentValue || !stockForm.value.accountBalance) {
+          ElMessage.error('请填写所有必填字段')
+          return
+        }
 
         if (isEditing.value) {
           stockStore.updateStock(
@@ -258,7 +335,8 @@ export default {
         showAddDialog.value = false
         resetForm()
       } catch (error) {
-        console.error('表单验证失败:', error)
+        console.error('保存失败:', error)
+        ElMessage.error('保存失败，请重试')
       }
     }
 
@@ -307,9 +385,6 @@ export default {
         shares: null
       }
       isEditing.value = false
-      if (stockFormRef.value) {
-        stockFormRef.value.clearValidate()
-      }
     }
 
     onMounted(() => {
@@ -327,8 +402,6 @@ export default {
       showAddDialog,
       isEditing,
       stockForm,
-      stockRules,
-      stockFormRef,
       getValuePercentage,
       saveStock,
       editStock,
@@ -339,86 +412,3 @@ export default {
   }
 }
 </script>
-
-<style scoped>
-.stock-investment {
-  margin: 0 auto;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.stats-section {
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  height: 100px;
-}
-
-.stat-content {
-  display: flex;
-  align-items: center;
-  height: 100%;
-}
-
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 15px;
-  font-size: 20px;
-}
-
-.market-icon {
-  background-color: #f0f9ff;
-  color: #67C23A;
-}
-
-.balance-icon {
-  background-color: #fef0f0;
-  color: #409EFF;
-}
-
-.total-icon {
-  background-color: #f5f7fa;
-  color: #E6A23C;
-}
-
-.count-icon {
-  background-color: #fdf6ec;
-  color: #F56C6C;
-}
-
-.stat-info {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-top: 4px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px 0;
-}
-</style>

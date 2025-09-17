@@ -1,0 +1,471 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Icons+Outlined');
+
+@layer base {
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+}
+
+@layer components {
+  .sidebar-nav-item {
+    @apply flex items-center px-4 py-3 rounded-lg transition-colors;
+  }
+  
+  .sidebar-nav-item.active {
+    @apply text-white bg-primary;
+  }
+  
+  .sidebar-nav-item:not(.active) {
+    @apply text-subtext-light dark:text-subtext-dark hover:bg-gray-200 dark:hover:bg-gray-700;
+  }
+  
+  .stat-card {
+    @apply bg-card-light dark:bg-card-dark p-6 rounded-lg shadow;
+  }
+  
+  .quick-action-btn {
+    @apply w-full flex items-center p-5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors;
+  }
+}
+
+/**
+ * 主题样式定义
+ * 支持亮色和暗色主题的全局样式
+ */
+
+/* 全局主题变量 */
+:root {
+  /* 默认亮色主题 */
+  --theme-primary: #409EFF;
+  --theme-primary-light: #66b1ff;
+  --theme-primary-dark: #337ecc;
+  
+  --theme-bg-primary: #ffffff;
+  --theme-bg-secondary: #f5f7fa;
+  --theme-bg-tertiary: #fafafa;
+  
+  --theme-text-primary: #303133;
+  --theme-text-secondary: #606266;
+  --theme-text-tertiary: #909399;
+  --theme-text-placeholder: #c0c4cc;
+  
+  --theme-border-light: #ebeef5;
+  --theme-border-base: #dcdfe6;
+  --theme-border-dark: #c0c4cc;
+  
+  --theme-card-bg: #ffffff;
+  --theme-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  
+  --theme-sidebar-bg: #f5f7fa;
+  --theme-sidebar-header-bg: #6b7280;
+  
+  /* 渐变色 - 亮色主题也改为灰色系 */
+  --gradient-income: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  --gradient-expense: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+  --gradient-balance: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+  --gradient-deposit: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+  --gradient-investment: linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%);
+  --gradient-total: linear-gradient(135deg, #111827 0%, #000000 100%);
+  
+  /* 过渡动画 */
+  --theme-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 暗色主题 */
+.theme-dark {
+  --theme-bg-primary: #0f0f0f;
+  --theme-bg-secondary: #1a1a1a;
+  --theme-bg-tertiary: #141414;
+  
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #d1d5db;
+  --theme-text-tertiary: #9ca3af;
+  --theme-text-placeholder: #6b7280;
+  
+  --theme-border-light: #2d2d2d;
+  --theme-border-base: #374151;
+  --theme-border-dark: #4b5563;
+  
+  --theme-card-bg: #1f1f1f;
+  --theme-card-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  
+  --theme-sidebar-bg: #111111;
+  --theme-sidebar-header-bg: #374151;
+  
+  /* 暗黑主题专用渐变色 - 灰色系 */
+  --gradient-income: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  --gradient-expense: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+  --gradient-balance: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+  --gradient-deposit: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+  --gradient-investment: linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%);
+  --gradient-total: linear-gradient(135deg, #111827 0%, #000000 100%);
+}
+
+/* 全局样式应用 */
+* {
+  transition: var(--theme-transition);
+}
+
+body {
+  background-color: var(--theme-bg-tertiary);
+  color: var(--theme-text-primary);
+}
+
+/* Element Plus 组件主题适配 */
+.theme-dark .el-card {
+  background-color: var(--theme-card-bg);
+  border-color: var(--theme-border-base);
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-card__header {
+  border-bottom-color: var(--theme-border-base);
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-menu {
+  background-color: transparent;
+  border-color: var(--theme-border-base);
+}
+
+.theme-dark .el-menu-item {
+  color: var(--theme-text-secondary);
+}
+
+.theme-dark .el-menu-item:hover {
+  background-color: rgba(107, 114, 128, 0.2);
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-menu-item.is-active {
+  background-color: #6b7280;
+  color: #ffffff;
+}
+
+/* 重置数据按钮保持红色警告 */
+.theme-dark .el-menu-item.reset-data {
+  color: #f56c6c !important;
+}
+
+.theme-dark .el-menu-item.reset-data:hover {
+  background-color: rgba(245, 108, 108, 0.1) !important;
+  color: #f56c6c !important;
+}
+
+.theme-dark .el-menu-item.reset-data.is-active {
+  background-color: #f56c6c !important;
+  color: white !important;
+}
+
+/* 重置数据按钮样式 */
+.theme-dark .reset-button {
+  background-color: #f56c6c !important;
+  border-color: #f56c6c !important;
+  color: white !important;
+}
+
+.theme-dark .reset-button:hover {
+  background-color: #f78989 !important;
+  border-color: #f78989 !important;
+  color: white !important;
+}
+
+.theme-dark .reset-button:focus {
+  background-color: #f56c6c !important;
+  border-color: #f56c6c !important;
+  color: white !important;
+}
+
+.theme-dark .el-button {
+  border-color: var(--theme-border-base);
+  background-color: var(--theme-card-bg);
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-button:hover {
+  border-color: var(--theme-primary-light);
+  background-color: rgba(64, 158, 255, 0.1);
+}
+
+.theme-dark .el-input__wrapper {
+  background-color: var(--theme-card-bg);
+  border-color: var(--theme-border-base);
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-input__inner {
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-input__inner::placeholder {
+  color: var(--theme-text-placeholder);
+}
+
+.theme-dark .el-select .el-input__wrapper {
+  background-color: var(--theme-card-bg);
+}
+
+.theme-dark .el-dropdown-menu {
+  background-color: var(--theme-card-bg);
+  border-color: var(--theme-border-base);
+}
+
+.theme-dark .el-dropdown-menu__item {
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-dropdown-menu__item:hover {
+  background-color: rgba(64, 158, 255, 0.1);
+  color: var(--theme-primary);
+}
+
+.theme-dark .el-dialog {
+  background-color: var(--theme-card-bg);
+  border-color: var(--theme-border-base);
+}
+
+.theme-dark .el-dialog__header {
+  border-bottom-color: var(--theme-border-base);
+}
+
+.theme-dark .el-dialog__title {
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .el-form-item__label {
+  color: var(--theme-text-secondary);
+}
+
+.theme-dark .el-drawer {
+  background-color: var(--theme-card-bg);
+}
+
+.theme-dark .el-drawer__header {
+  border-bottom-color: var(--theme-border-base);
+  color: var(--theme-text-primary);
+}
+
+/* 自定义组件主题适配 */
+.theme-dark .desktop-aside {
+  background-color: var(--theme-sidebar-bg);
+}
+
+.theme-dark .sidebar-header {
+  background-color: var(--theme-sidebar-header-bg);
+}
+
+.theme-dark .main-content {
+  background-color: var(--theme-bg-tertiary);
+}
+
+.theme-dark .mobile-header {
+  background-color: var(--theme-sidebar-header-bg);
+}
+
+.theme-dark .mobile-bottom-nav {
+  background-color: var(--theme-card-bg);
+  border-top-color: var(--theme-border-base);
+}
+
+.theme-dark .nav-item {
+  color: var(--theme-text-tertiary);
+}
+
+.theme-dark .nav-item.active {
+  color: var(--theme-primary);
+}
+
+/* 统计卡片主题适配 */
+.theme-dark .stat-card {
+  background-color: var(--theme-card-bg);
+  box-shadow: var(--theme-card-shadow);
+  border: 1px solid var(--theme-border-light);
+}
+
+.theme-dark .stat-card:hover {
+  background-color: #252525;
+  border-color: var(--theme-border-base);
+  transform: translateY(-2px);
+}
+
+.theme-dark .stat-value {
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .stat-label {
+  color: var(--theme-text-secondary);
+}
+
+/* 暗黑主题下的卡片顶部条纹优化 */
+.theme-dark .stat-card::before {
+  height: 3px;
+  opacity: 0.8;
+}
+
+/* 资产分析图表主题适配 */
+.theme-dark .asset-chart {
+  background-color: var(--theme-card-bg);
+}
+
+.theme-dark .chart-header {
+  border-bottom-color: var(--theme-border-base);
+}
+
+.theme-dark .chart-header h4 {
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .total-display {
+  color: var(--theme-text-secondary);
+}
+
+.theme-dark .total-amount {
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .asset-label {
+  color: var(--theme-text-secondary);
+}
+
+.theme-dark .asset-value {
+  color: var(--theme-text-primary);
+}
+
+.theme-dark .progress-bg {
+  background-color: var(--theme-border-light);
+}
+
+.theme-dark .percentage {
+  color: var(--theme-text-secondary);
+}
+
+/* 暗黑主题下的资产项优化 */
+.theme-dark .asset-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--theme-border-light);
+}
+
+.theme-dark .asset-item:last-child {
+  border-bottom: none;
+}
+
+/* 滚动条主题适配 */
+.theme-dark ::-webkit-scrollbar-track {
+  background: var(--theme-bg-secondary);
+}
+
+.theme-dark ::-webkit-scrollbar-thumb {
+  background: var(--theme-border-dark);
+}
+
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-text-tertiary);
+}
+
+/* 动画效果 */
+.theme-transition-enter-active,
+.theme-transition-leave-active {
+  transition: var(--theme-transition);
+}
+
+.theme-transition-enter-from,
+.theme-transition-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* 响应式主题适配 */
+@media (max-width: 768px) {
+  .theme-dark .main-content {
+    background-color: var(--theme-bg-tertiary);
+  }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  :root {
+    --theme-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+  }
+  
+  .theme-dark {
+    --theme-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* 减少动画模式支持 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* 统一空状态样式 */
+.unified-empty-state {
+  text-align: center;
+  padding: 80px 40px;
+  background: var(--theme-card-bg);
+  border-radius: 12px;
+  box-shadow: var(--theme-card-shadow);
+  margin: 20px 0;
+  border: 1px solid var(--theme-border-light);
+}
+
+.unified-empty-state .empty-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.unified-empty-state .empty-icon svg {
+  width: 80px;
+  height: 80px;
+  color: var(--theme-text-tertiary);
+  stroke-width: 1.5;
+}
+
+.unified-empty-state .empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.unified-empty-state .empty-description {
+  color: var(--theme-text-secondary);
+  margin: 0 0 32px 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.unified-empty-state .empty-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--theme-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--theme-transition);
+}
+
+.unified-empty-state .empty-action:hover {
+  background: var(--theme-primary-dark);
+  transform: translateY(-1px);
+}
+
+.unified-empty-state .empty-action svg {
+  width: 16px;
+  height: 16px;
+}

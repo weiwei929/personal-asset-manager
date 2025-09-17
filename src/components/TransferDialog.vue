@@ -1,106 +1,143 @@
 <template>
-  <el-dialog
-    v-model="visible"
-    title="资金转换"
-    width="500px"
-    :before-close="handleClose"
-  >
-    <el-form
-      ref="formRef"
-      :model="form"
-      :rules="rules"
-      label-width="100px"
-      @submit.prevent="handleSubmit"
-    >
-      <!-- 转换信息概览 -->
-      <div class="transfer-info">
-        <div class="info-item">
-          <span class="label">当前净收入:</span>
-          <span class="value">¥{{ formatAmount(currentMonthFinance.netIncome || 0) }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">已分配金额:</span>
-          <span class="value">¥{{ formatAmount((currentMonthFinance.getAllocatedAmount && currentMonthFinance.getAllocatedAmount()) || 0) }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">可用金额:</span>
-          <span class="value available">¥{{ formatAmount(availableAmount) }}</span>
-        </div>
-      </div>
-
-      <el-divider />
-
-      <!-- 转换表单 -->
-      <el-form-item label="来源资金" prop="fromType">
-        <el-select v-model="form.fromType" placeholder="请选择来源资金类型" style="width: 100%">
-          <el-option
-            v-for="option in fromTypeOptions"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item label="目标资金" prop="toType">
-        <el-select v-model="form.toType" placeholder="请选择目标资金类型" style="width: 100%">
-          <el-option
-            v-for="option in toTypeOptions"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item label="转换金额" prop="amount">
-        <el-input-number
-          v-model="form.amount"
-          :min="0"
-          :max="maxAmount"
-          :precision="2"
-          placeholder="请输入转换金额"
-          style="width: 100%"
-        />
-        <div class="amount-hint">
-          最大可转换: ¥{{ formatAmount(maxAmount) }}
-        </div>
-      </el-form-item>
-
-      <el-form-item label="转换说明" prop="description">
-        <el-input
-          v-model="form.description"
-          type="textarea"
-          :rows="3"
-          placeholder="请输入转换说明（可选）"
-          maxlength="200"
-          show-word-limit
-        />
-      </el-form-item>
-
-      <el-form-item label="转换日期" prop="date">
-        <el-date-picker
-          v-model="form.date"
-          type="date"
-          placeholder="选择转换日期"
-          style="width: 100%"
-        />
-      </el-form-item>
-    </el-form>
-
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="handleClose">取消</el-button>
-        <el-button 
-          type="primary" 
-          :loading="loading"
-          @click="handleSubmit"
+  <!-- 资金转换对话框 -->
+  <div v-if="visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+          资金转换
+        </h3>
+        <button
+          @click="handleClose"
+          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         >
-          确认转换
-        </el-button>
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
       </div>
-    </template>
-  </el-dialog>
+
+      <div class="p-6">
+        <!-- 转换信息概览 -->
+        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm text-gray-600 dark:text-gray-400">当前净收入:</span>
+            <span class="font-semibold text-gray-900 dark:text-white">¥{{ formatAmount(currentMonthFinance.netIncome || 0) }}</span>
+          </div>
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm text-gray-600 dark:text-gray-400">已分配金额:</span>
+            <span class="font-semibold text-gray-900 dark:text-white">¥{{ formatAmount((currentMonthFinance.getAllocatedAmount && currentMonthFinance.getAllocatedAmount()) || 0) }}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-gray-600 dark:text-gray-400">可用金额:</span>
+            <span class="font-semibold text-green-600 dark:text-green-400 text-lg">¥{{ formatAmount(availableAmount) }}</span>
+          </div>
+        </div>
+
+        <form @submit.prevent="handleSubmit" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              来源资金 <span class="text-red-500">*</span>
+            </label>
+            <select
+              v-model="form.fromType"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              required
+            >
+              <option value="">请选择来源资金类型</option>
+              <option
+                v-for="option in fromTypeOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              目标资金 <span class="text-red-500">*</span>
+            </label>
+            <select
+              v-model="form.toType"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              required
+            >
+              <option value="">请选择目标资金类型</option>
+              <option
+                v-for="option in toTypeOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              转换金额 <span class="text-red-500">*</span>
+            </label>
+            <input
+              v-model="form.amount"
+              type="number"
+              step="0.01"
+              :min="0"
+              :max="maxAmount"
+              placeholder="请输入转换金额"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              required
+            />
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              最大可转换: ¥{{ formatAmount(maxAmount) }}
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              转换说明
+            </label>
+            <textarea
+              v-model="form.description"
+              placeholder="请输入转换说明（可选）"
+              rows="3"
+              maxlength="200"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+            ></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              转换日期 <span class="text-red-500">*</span>
+            </label>
+            <input
+              v-model="form.date"
+              type="date"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              required
+            />
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              @click="handleClose"
+              class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              :disabled="loading"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+            >
+              {{ loading ? '转换中...' : '确认转换' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
@@ -158,9 +195,9 @@ export default {
     // 来源资金类型选项
     const fromTypeOptions = [
       { value: 'net-income', label: '月度净收入' },
-      { value: 'bank-deposit', label: '银行存款' },
-      { value: 'stock', label: '股票投资' },
-      { value: 'lent-money', label: '借出资金' }
+      { value: 'bank_deposit', label: '银行存款' },
+      { value: 'stock_investment', label: '股票投资' },
+      { value: 'lent_money', label: '借出资金' }
     ]
 
     // 目标资金类型选项（排除来源类型）
@@ -180,7 +217,7 @@ export default {
     })
 
     const availableAmount = computed(() => {
-      if (form.value.fromType === 'monthly_income') {
+      if (form.value.fromType === 'net-income') {
         const finance = financeStore.monthlyFinances.find(mf => mf.month === props.currentMonth)
         if (finance && typeof finance.getAvailableAmount === 'function') {
           return finance.getAvailableAmount()

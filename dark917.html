@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>个人资产管理系统</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Icons+Outlined" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#4F46E5",
+                        "background-light": "#F3F4F6",
+                        "background-dark": "#111827",
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#1F2937",
+                        "text-light": "#1F2937",
+                        "text-dark": "#F9FAFB",
+                        "subtext-light": "#6B7280",
+                        "subtext-dark": "#9CA3AF",
+                        "border-light": "#E5E7EB",
+                        "border-dark": "#374151"
+                    },
+                    fontFamily: {
+                        display: ["'Noto Sans SC'", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.5rem",
+                        lg: "1rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        .dark .bg-gray-100 {
+            background-color: #374151;
+        }
+        .dark .hover\:bg-gray-200:hover {
+            background-color: #4B5563;
+        }
+    </style>
+</head>
+<body class="bg-background-dark font-display">
+<div class="flex h-screen">
+<aside class="w-64 bg-card-dark flex flex-col p-8 shadow-lg">
+<div class="flex items-center mb-12">
+<h1 class="text-xl font-bold text-text-dark">个人资产管理系统</h1>
+<button class="ml-auto p-2 rounded-full bg-gray-700 text-text-dark">
+<span class="material-icons-outlined">light_mode</span>
+</button>
+</div>
+<nav class="flex-1 space-y-5">
+<a class="flex items-center px-4 py-3 text-white bg-primary rounded-lg" href="#">
+<span class="material-icons-outlined mr-4">dashboard</span>
+<span>总览面板</span>
+</a>
+<a class="flex items-center px-4 py-3 text-subtext-dark hover:bg-gray-700 rounded-lg" href="#">
+<span class="material-icons-outlined mr-4">calendar_today</span>
+<span>月度收支</span>
+</a>
+<a class="flex items-center px-4 py-3 text-subtext-dark hover:bg-gray-700 rounded-lg" href="#">
+<span class="material-icons-outlined mr-4">account_balance</span>
+<span>银行存款</span>
+</a>
+<a class="flex items-center px-4 py-3 text-subtext-dark hover:bg-gray-700 rounded-lg" href="#">
+<span class="material-icons-outlined mr-4">trending_up</span>
+<span>股票投资</span>
+</a>
+<a class="flex items-center px-4 py-3 text-subtext-dark hover:bg-gray-700 rounded-lg" href="#">
+<span class="material-icons-outlined mr-4">real_estate_agent</span>
+<span>借出资金</span>
+</a>
+</nav>
+<div class="mt-auto">
+<button class="w-full flex items-center justify-center px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg">
+<span class="material-icons-outlined mr-3">delete</span>
+<span>重置数据</span>
+</button>
+</div>
+</aside>
+<main class="flex-1 p-12 overflow-y-auto">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
+<div class="bg-card-dark p-6 rounded-lg shadow col-span-1 md:col-span-2 lg:col-span-1">
+<div class="flex items-center">
+<div class="p-4 bg-green-900 rounded-full">
+<span class="material-icons-outlined text-green-400">add</span>
+</div>
+<div class="ml-6">
+<p class="text-sm text-subtext-dark">当月收入</p>
+<p class="text-2xl font-bold text-text-dark">¥0</p>
+</div>
+</div>
+</div>
+<div class="bg-card-dark p-6 rounded-lg shadow col-span-1 md:col-span-2 lg:col-span-1">
+<div class="flex items-center">
+<div class="p-4 bg-red-900 rounded-full">
+<span class="material-icons-outlined text-red-400">remove</span>
+</div>
+<div class="ml-6">
+<p class="text-sm text-subtext-dark">当月支出</p>
+<p class="text-2xl font-bold text-text-dark">¥0</p>
+</div>
+</div>
+</div>
+<div class="bg-card-dark p-6 rounded-lg shadow">
+<div class="flex items-center">
+<div class="p-4 bg-blue-900 rounded-full">
+<span class="material-icons-outlined text-blue-400">receipt_long</span>
+</div>
+<div class="ml-6">
+<p class="text-sm text-subtext-dark">月净收入</p>
+<p class="text-2xl font-bold text-text-dark">¥0</p>
+</div>
+</div>
+</div>
+<div class="bg-card-dark p-6 rounded-lg shadow">
+<div class="flex items-center">
+<div class="p-4 bg-purple-900 rounded-full">
+<span class="material-icons-outlined text-purple-400">account_balance_wallet</span>
+</div>
+<div class="ml-6">
+<p class="text-sm text-subtext-dark">银行存款</p>
+<p class="text-2xl font-bold text-text-dark">¥0</p>
+</div>
+</div>
+</div>
+<div class="bg-card-dark p-6 rounded-lg shadow">
+<div class="flex items-center">
+<div class="p-4 bg-yellow-900 rounded-full">
+<span class="material-icons-outlined text-yellow-400">query_stats</span>
+</div>
+<div class="ml-6">
+<p class="text-sm text-subtext-dark">股票投资</p>
+<p class="text-2xl font-bold text-text-dark">¥0</p>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-12">
+<div class="col-span-3 lg:col-span-2 bg-card-dark p-10 rounded-lg shadow">
+<div class="flex justify-between items-center mb-10">
+<h2 class="text-xl font-semibold text-text-dark">资产分布概览</h2>
+<div class="text-right">
+<p class="text-sm text-subtext-dark">总资产</p>
+<p class="text-3xl font-bold text-primary">¥0</p>
+</div>
+</div>
+<div class="space-y-10">
+<div>
+<div class="flex justify-between mb-3">
+<span class="text-base text-text-dark">月度净收入</span>
+<span class="text-base font-medium text-text-dark">¥0 <span class="text-sm text-subtext-dark ml-2">0.0%</span></span>
+</div>
+<div class="w-full bg-gray-700 rounded-full h-3">
+<div class="bg-blue-500 h-3 rounded-full" style="width: 0%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-3">
+<span class="text-base text-text-dark">银行存款</span>
+<span class="text-base font-medium text-text-dark">¥0 <span class="text-sm text-subtext-dark ml-2">0.0%</span></span>
+</div>
+<div class="w-full bg-gray-700 rounded-full h-3">
+<div class="bg-purple-500 h-3 rounded-full" style="width: 0%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-3">
+<span class="text-base text-text-dark">股票投资</span>
+<span class="text-base font-medium text-text-dark">¥0 <span class="text-sm text-subtext-dark ml-2">0.0%</span></span>
+</div>
+<div class="w-full bg-gray-700 rounded-full h-3">
+<div class="bg-yellow-500 h-3 rounded-full" style="width: 0%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-3">
+<span class="text-base text-text-dark">待还款资金</span>
+<span class="text-base font-medium text-text-dark">¥0 <span class="text-sm text-subtext-dark ml-2">0.0%</span></span>
+</div>
+<div class="w-full bg-gray-700 rounded-full h-3">
+<div class="bg-red-500 h-3 rounded-full" style="width: 0%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="col-span-3 lg:col-span-1 bg-card-dark p-10 rounded-lg shadow">
+<h2 class="text-xl font-semibold text-text-dark mb-10">快捷操作</h2>
+<div class="space-y-6">
+<button class="w-full flex items-center p-6 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+<span class="material-icons-outlined text-primary mr-6">add_circle_outline</span>
+<span class="text-text-dark font-medium">月度收支</span>
+</button>
+<button class="w-full flex items-center p-6 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+<span class="material-icons-outlined text-primary mr-6">savings</span>
+<span class="text-text-dark font-medium">资金管理</span>
+</button>
+<button class="w-full flex items-center p-6 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+<span class="material-icons-outlined text-primary mr-6">add_card</span>
+<span class="text-text-dark font-medium">新增存款</span>
+</button>
+<button class="w-full flex items-center p-6 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+<span class="material-icons-outlined text-primary mr-6">analytics</span>
+<span class="text-text-dark font-medium">股票投资</span>
+</button>
+<button class="w-full flex items-center p-6 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+<span class="material-icons-outlined text-primary mr-6">description</span>
+<span class="text-text-dark font-medium">借贷记录</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>
