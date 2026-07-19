@@ -9,6 +9,7 @@ import { useFinanceStore } from './stores/finance.js'
 import { useFundTransferStore } from './stores/fundTransfer.js'
 import { useBankDepositStore } from './stores/bankDeposit.js'
 import { useStockInvestmentStore } from './stores/stockInvestment.js'
+import { useFundInvestmentStore } from './stores/fundInvestment.js'
 import { useLentMoneyStore } from './stores/lentMoney.js'
 
 // 导入数据重置工具（确保控制台命令可用）
@@ -29,12 +30,14 @@ const financeStore = useFinanceStore()
 const fundTransferStore = useFundTransferStore()
 const bankDepositStore = useBankDepositStore()
 const stockStore = useStockInvestmentStore()
+const fundInvestStore = useFundInvestmentStore()
 const lentMoneyStore = useLentMoneyStore()
 
 financeStore.loadFromLocalStorage()
 fundTransferStore.loadTransfers()
 bankDepositStore.loadFromLocalStorage()
 stockStore.loadFromLocalStorage()
+fundInvestStore.loadFromLocalStorage()
 lentMoneyStore.loadFromLocalStorage()
 
 app.mount('#app')

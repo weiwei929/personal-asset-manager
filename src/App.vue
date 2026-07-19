@@ -111,7 +111,7 @@
             <Dashboard v-if="activeMenu === 'dashboard'" @openDialog="handleOpenDialog" />
             <MonthlyFinance v-else-if="activeMenu === 'monthly-finance'" />
             <BankDepositList v-else-if="activeMenu === 'bank-deposits'" />
-            <StockInvestment v-else-if="activeMenu === 'stock-investment'" />
+            <Investment v-else-if="activeMenu === 'stock-investment'" />
             <LentMoney v-else-if="activeMenu === 'lent-money'" />
           </div>
         </main>
@@ -127,7 +127,7 @@ import { ElMessage } from 'element-plus'
 import Dashboard from './components/Dashboard.vue'
 import MonthlyFinance from './components/MonthlyFinance.vue'
 import BankDepositList from './components/BankDepositList.vue'
-import StockInvestment from './components/StockInvestment.vue'
+import Investment from './components/Investment.vue'
 import LentMoney from './components/LentMoney.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import LineIcon from './components/LineIcon.vue'
@@ -138,7 +138,7 @@ export default {
     Dashboard,
     MonthlyFinance,
     BankDepositList,
-    StockInvestment,
+    Investment,
     LentMoney,
     ThemeToggle,
     LineIcon

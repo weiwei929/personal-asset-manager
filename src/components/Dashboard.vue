@@ -147,6 +147,7 @@ import { formatAmount } from '../utils/format.js'
 import { useFinanceStore } from '../stores/finance'
 import { useBankDepositStore } from '../stores/bankDeposit'
 import { useStockInvestmentStore } from '../stores/stockInvestment'
+import { useFundInvestmentStore } from '../stores/fundInvestment'
 import { useLentMoneyStore } from '../stores/lentMoney'
 import { useFundTransferStore } from '../stores/fundTransfer'
 import TransferDialog from './TransferDialog.vue'
@@ -157,6 +158,7 @@ const transferTarget = 50000
 const financeStore = useFinanceStore()
 const bankDepositStore = useBankDepositStore()
 const stockStore = useStockInvestmentStore()
+const fundInvestStore = useFundInvestmentStore()
 const lentMoneyStore = useLentMoneyStore()
 const transferStore = useFundTransferStore()
 
@@ -166,11 +168,12 @@ const currentMonthNet = computed(() => financeStore.currentMonthNet.amount || 0)
 const currentMonthLabel = computed(() => financeStore.currentMonthLabel)
 const cashPool = computed(() => financeStore.cashPool)
 const totalDepositAmount = computed(() => bankDepositStore.totalDepositAmount)
-const totalInvestmentAssets = computed(() => stockStore.totalInvestmentAssets)
+const totalStockAssets = computed(() => stockStore.totalInvestmentAssets)
+const totalFundAssets = computed(() => fundInvestStore.totalInvestmentAssets)
 const pendingAmount = computed(() => lentMoneyStore.pendingAmount)
 
 const totalAssetsCorrect = computed(() => {
-  return cashPool.value + totalDepositAmount.value + totalInvestmentAssets.value + pendingAmount.value
+  return cashPool.value + totalDepositAmount.value + totalStockAssets.value + totalFundAssets.value + pendingAmount.value
 })
 
 const assetRows = computed(() => {
@@ -193,9 +196,16 @@ const assetRows = computed(() => {
     {
       key: 'stock',
       label: '股票投资',
-      amount: totalInvestmentAssets.value,
+      amount: totalStockAssets.value,
       barClass: 'bg-indigo-500/80',
       dotClass: 'bg-indigo-500'
+    },
+    {
+      key: 'fund',
+      label: '基金投资',
+      amount: totalFundAssets.value,
+      barClass: 'bg-violet-500/80',
+      dotClass: 'bg-violet-500'
     },
     {
       key: 'lent',
@@ -238,6 +248,7 @@ const handleTransferSuccess = () => {
   financeStore.loadFromLocalStorage()
   bankDepositStore.loadFromLocalStorage()
   stockStore.loadFromLocalStorage()
+  fundInvestStore.loadFromLocalStorage()
   lentMoneyStore.loadFromLocalStorage()
   transferStore.loadTransfers()
 }
@@ -246,6 +257,7 @@ onMounted(() => {
   financeStore.loadFromLocalStorage()
   bankDepositStore.loadFromLocalStorage()
   stockStore.loadFromLocalStorage()
+  fundInvestStore.loadFromLocalStorage()
   lentMoneyStore.loadFromLocalStorage()
   transferStore.loadTransfers()
 })

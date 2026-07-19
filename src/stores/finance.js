@@ -223,6 +223,7 @@ export const useFinanceStore = defineStore('finance', {
         cash_pool: '资金池',
         bank_deposit: '银行存款',
         stock_investment: '股票投资',
+        fund_investment: '基金投资',
         lent_money: '借出资金'
       }
       return labels[type] || '未知类型'

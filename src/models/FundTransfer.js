@@ -37,11 +37,11 @@ class FundTransfer {
     if (this.amount <= 0) errors.push('转换金额必须大于0')
     if (!this.description) errors.push('转换描述不能为空')
     
-    const validTypes = ['cash_pool', 'bank_deposit', 'stock_investment', 'lent_money']
+    const validTypes = ['cash_pool', 'bank_deposit', 'stock_investment', 'fund_investment', 'lent_money']
     if (!validTypes.includes(this.fromType)) errors.push('无效的转出类型')
     if (!validTypes.includes(this.toType)) errors.push('无效的转入类型')
     
-    const validTransferTypes = ['manual', 'maturity', 'sell', 'return', 'reverse']
+    const validTransferTypes = ['manual', 'maturity', 'sell', 'return', 'reverse', 'redeem']
     if (!validTransferTypes.includes(this.transferType)) errors.push('无效的转换类型')
     
     return {
@@ -58,6 +58,7 @@ class FundTransfer {
       manual: '手动转换',
       maturity: '到期变现',
       sell: '卖出变现',
+      redeem: '基金赎回',
       return: '借款收回',
       reverse: '撤销操作'
     }
@@ -72,6 +73,7 @@ class FundTransfer {
       cash_pool: '资金池',
       bank_deposit: '银行存款',
       stock_investment: '股票投资',
+      fund_investment: '基金投资',
       lent_money: '借出资金'
     }
     return labels[type] || '未知类型'

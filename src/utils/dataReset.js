@@ -8,6 +8,7 @@ const STORAGE_KEYS = [
   'monthlyFinances',
   'bank-deposits',
   'stock-investments',
+  'fund-investments',
   'lent-money-records',
   'fundTransfers',
   // 兼容旧键名（若存在一并清除）

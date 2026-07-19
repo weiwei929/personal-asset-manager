@@ -204,6 +204,7 @@ const fromTypeOptions = [
   { value: 'cash_pool', label: '资金池' },
   { value: 'bank_deposit', label: '银行存款' },
   { value: 'stock_investment', label: '股票投资' },
+  { value: 'fund_investment', label: '基金投资' },
   { value: 'lent_money', label: '借出资金' }
 ]
 
