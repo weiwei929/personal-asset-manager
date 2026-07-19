@@ -85,7 +85,6 @@ const themeStore = useThemeStore()
 const showDropdown = ref(false)
 
 const mode = computed(() => themeStore.mode)
-const isDark = computed(() => themeStore.isDark)
 
 const currentTitle = computed(() => {
   switch (mode.value) {
