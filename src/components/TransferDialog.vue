@@ -190,9 +190,9 @@ const financeStore = useFinanceStore()
     
 const loading = ref(false)
     
-// 表单数据
+// 表单数据（类型值须与 FundTransfer / finance store 一致）
 const form = ref({
-  fromType: 'net-income',
+  fromType: 'cash_pool',
   toType: '',
   amount: 0,
   description: '',
@@ -201,7 +201,7 @@ const form = ref({
 
 // 来源资金类型选项
 const fromTypeOptions = [
-  { value: 'net-income', label: '月度净收入' },
+  { value: 'cash_pool', label: '资金池' },
   { value: 'bank_deposit', label: '银行存款' },
   { value: 'stock_investment', label: '股票投资' },
   { value: 'lent_money', label: '借出资金' }
@@ -234,45 +234,58 @@ const handleClose = () => {
   resetForm()
 }
 
-// 重置表单
+// 重置表单（自定义表单，无 Element formRef）
 const resetForm = () => {
-    if (formRef.value) {
-      formRef.value.clearValidate()
-    }
+  form.value = {
+    fromType: 'cash_pool',
+    toType: '',
+    amount: 0,
+    description: '',
+    date: new Date().toISOString().slice(0, 10)
+  }
 }
 
 // 处理提交
 const handleSubmit = async () => {
   try {
-    // 金额验证
     if (form.value.amount <= 0) {
-      alert('请输入有效的转换金额')
+      ElMessage.warning('请输入有效的转换金额')
       return
     }
-    
-    if (form.value.amount > maxAmount.value) {
-      alert('转换金额超过可用余额')
+
+    // 仅从资金池转出时校验资金池上限
+    if (form.value.fromType === 'cash_pool' && form.value.amount > maxAmount.value) {
+      ElMessage.warning('转换金额超过资金池可用余额')
       return
     }
 
     if (!form.value.fromType || !form.value.toType) {
-      alert('请选择来源和目标资金类型')
+      ElMessage.warning('请选择来源和目标资金类型')
+      return
+    }
+
+    if (form.value.fromType === form.value.toType) {
+      ElMessage.warning('来源与目标不能相同')
       return
     }
 
     loading.value = true
 
-    // 创建转换记录
-    const transferData = {
+    const fromLabel = fromTypeOptions.find(o => o.value === form.value.fromType)?.label || form.value.fromType
+    const toLabel = fromTypeOptions.find(o => o.value === form.value.toType)?.label || form.value.toType
+
+    const result = await fundTransferStore.performTransfer({
       fromType: form.value.fromType,
       toType: form.value.toType,
       amount: form.value.amount,
-      description: form.value.description,
-      date: form.value.date,
-      month: props.currentMonth
-    }
+      description: form.value.description || `手动转换: ${fromLabel} → ${toLabel}`,
+      date: form.value.date
+    })
 
-    await fundTransferStore.performTransfer(transferData)
+    if (!result.success) {
+      ElMessage.error(result.error || result.message || '转换失败')
+      return
+    }
 
     ElMessage.success('资金转换成功！')
     emit('success')

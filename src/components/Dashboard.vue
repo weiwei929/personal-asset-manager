@@ -181,8 +181,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
 import { formatAmount } from '../utils/format.js'
 import { useFinanceStore } from '../stores/finance'
 import { useBankDepositStore } from '../stores/bankDeposit'
