@@ -1,181 +1,242 @@
 import { defineStore } from 'pinia'
-import Transaction from '../models/Transaction.js'
-import Category from '../models/Category.js'
 import MonthlyFinance from '../models/MonthlyFinance.js'
 
+/**
+ * 月度财务 + 资金池。
+ * 资金池公式：Σ净收入 − Σ已分配金额（跨月合计）。
+ * 注意：Pinia options getter 若用箭头函数，不能通过 state.xxx 访问其它 getter。
+ */
 export const useFinanceStore = defineStore('finance', {
   state: () => ({
-    transactions: [],
-    categories: Category.getDefaultCategories(),
-    monthlyFinances: [] // 添加月度财务数组
+    monthlyFinances: [],
+    loading: false,
+    error: null
   }),
 
   getters: {
-    // 获取所有收入
-    incomeTransactions: (state) => state.transactions.filter(t => t.type === 'income'),
-    // 获取所有支出
-    expenseTransactions: (state) => state.transactions.filter(t => t.type === 'expense'),
-    // 计算总收入
-    totalIncome: (state) => state.transactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0),
-    // 计算总支出
-    totalExpense: (state) => state.transactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0),
-    // 计算净收入
-    netIncome: (state) => {
-      const income = state.transactions
-        .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + t.amount, 0)
-      const expense = state.transactions
-        .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0)
-      return income - expense
-    },
-    // 按分类分组的交易
-    transactionsByCategory: (state) => {
-      const result = {}
-      state.categories.forEach(category => {
-        result[category.id] = state.transactions.filter(t => t.category === category.id)
-      })
-      return result
-    },
-
-    // 月度财务相关计算属性
-    currentMonthFinance: (state) => {
-      const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM format
-      const monthlyFinance = state.monthlyFinances.find(mf => mf.month === currentMonth)
-      return monthlyFinance || { income: 0, expense: 0, netIncome: 0 }
-    },
-
-    monthlyFinancesByMonth: (state) => {
-      return state.monthlyFinances.sort((a, b) => b.month.localeCompare(a.month))
-    },
-
     totalCumulativeNet: (state) => {
-      return state.monthlyFinances.reduce((sum, mf) => sum + (mf.income - mf.expense), 0)
+      return state.monthlyFinances.reduce((sum, mf) => {
+        const net = typeof mf.netIncome === 'number'
+          ? mf.netIncome
+          : (Number(mf.income) || 0) - (Number(mf.expense) || 0)
+        return sum + net
+      }, 0)
     },
 
-    // 资金转换相关计算属性
-    getCurrentMonthWithTransfers: (state) => {
-      const currentMonth = new Date().toISOString().slice(0, 7)
-      const monthlyFinance = state.monthlyFinances.find(mf => mf.month === currentMonth)
-      if (!monthlyFinance) return null
-      
-      // 这里需要从fundTransferStore获取转换记录，暂时返回基础信息
+    totalAllocatedAmount: (state) => {
+      return state.monthlyFinances.reduce((sum, mf) => {
+        const allocated = mf.allocated_amounts || {}
+        return sum + Object.values(allocated).reduce((a, b) => a + (Number(b) || 0), 0)
+      }, 0)
+    },
+
+    // 必须用普通函数 + this，才能组合其它 getter
+    cashPool() {
+      const totalNet = this.totalCumulativeNet
+      const allocated = this.totalAllocatedAmount
+      const pool = totalNet - allocated
+      return Number.isFinite(pool) ? Math.max(0, pool) : 0
+    },
+
+    currentMonthNet: (state) => {
+      const currentMonth = MonthlyFinance.getCurrentMonth()
+      const current = state.monthlyFinances.find(mf => mf.month === currentMonth)
+      const amount = current
+        ? (typeof current.netIncome === 'number'
+          ? current.netIncome
+          : (Number(current.income) || 0) - (Number(current.expense) || 0))
+        : 0
       return {
-        ...monthlyFinance,
-        allocatedAmount: 0, // 将通过组件中调用fundTransferStore计算
-        availableAmount: monthlyFinance.income - monthlyFinance.expense // 基础可用金额
+        amount,
+        month: currentMonth,
+        displayMonth: MonthlyFinance.formatMonth(currentMonth)
+      }
+    },
+
+    currentMonthLabel() {
+      const monthData = this.currentMonthNet
+      return `${monthData.displayMonth}净收入`
+    },
+
+    transferReminder() {
+      const pool = this.cashPool
+      const remaining = 50000 - pool
+      return {
+        canTransfer: pool >= 50000,
+        remaining: Math.max(0, remaining),
+        progress: Math.min(100, (pool / 50000) * 100)
       }
     }
   },
 
   actions: {
-    // 添加交易
-    addTransaction(type, amount, category, description) {
-      const transaction = Transaction.create(type, amount, category, description)
-      this.transactions.push(transaction)
-      this.saveToLocalStorage()
-    },
-
-    // 删除交易
-    removeTransaction(id) {
-      const index = this.transactions.findIndex(t => t.id === id)
-      if (index > -1) {
-        this.transactions.splice(index, 1)
-        this.saveToLocalStorage()
-      }
-    },
-
-    // 添加分类
-    addCategory(name, type, color) {
-      const category = Category.create(name, type, color)
-      this.categories.push(category)
-      this.saveToLocalStorage()
-    },
-
-    // 删除分类
-    removeCategory(id) {
-      const index = this.categories.findIndex(c => c.id === id)
-      if (index > -1) {
-        this.categories.splice(index, 1)
-        this.saveToLocalStorage()
-      }
-    },
-
-    // 更新月度财务
     updateMonthlyFinance(month, income, expense) {
-      const index = this.monthlyFinances.findIndex(mf => mf.month === month)
-      const monthlyFinance = {
-        month,
-        income,
-        expense,
-        netIncome: income - expense,
-        cumulativeNet: 0 // 将在计算中更新
+      const incomeNum = Number(income) || 0
+      const expenseNum = Number(expense) || 0
+      const existingIndex = this.monthlyFinances.findIndex(mf => mf.month === month)
+
+      if (existingIndex >= 0) {
+        const row = this.monthlyFinances[existingIndex]
+        if (typeof row.update === 'function') {
+          row.update(incomeNum, expenseNum)
+        } else {
+          row.income = incomeNum
+          row.expense = expenseNum
+          row.netIncome = incomeNum - expenseNum
+          row.updatedAt = new Date().toISOString()
+        }
+        // 确保 allocated_amounts 存在
+        if (!row.allocated_amounts) {
+          row.allocated_amounts = {}
+        }
+      } else {
+        this.monthlyFinances.push(new MonthlyFinance(month, incomeNum, expenseNum))
       }
 
-      if (index > -1) {
-        this.monthlyFinances[index] = monthlyFinance
-      } else {
+      this.saveToLocalStorage()
+    },
+
+    loadFromLocalStorage() {
+      try {
+        const data = localStorage.getItem('monthlyFinances')
+        if (data) {
+          const parsed = JSON.parse(data)
+          this.monthlyFinances = parsed.map(item => {
+            const mf = Object.assign(new MonthlyFinance(item.month || item.id, 0, 0), item)
+            // 纠正历史数据中 netIncome 与 income/expense 不一致
+            const income = Number(mf.income) || 0
+            const expense = Number(mf.expense) || 0
+            mf.netIncome = income - expense
+            if (!mf.allocated_amounts || typeof mf.allocated_amounts !== 'object') {
+              mf.allocated_amounts = {}
+            }
+            return mf
+          })
+        }
+      } catch (error) {
+        console.error('加载月度财务数据失败:', error)
+        this.monthlyFinances = []
+      }
+    },
+
+    saveToLocalStorage() {
+      try {
+        localStorage.setItem('monthlyFinances', JSON.stringify(this.monthlyFinances))
+      } catch (error) {
+        console.error('保存月度财务数据失败:', error)
+      }
+    },
+
+    clearAllData() {
+      this.monthlyFinances = []
+      this.saveToLocalStorage()
+    },
+
+    /**
+     * 将金额记入「已分配」（优先当前月，用于资金池扣减）
+     */
+    allocateFundsToMonth(targetType, amount) {
+      const amountNum = Number(amount) || 0
+      if (amountNum <= 0) return
+
+      const currentMonth = MonthlyFinance.getCurrentMonth()
+      let monthlyFinance = this.monthlyFinances.find(mf => mf.month === currentMonth)
+
+      if (!monthlyFinance) {
+        monthlyFinance = new MonthlyFinance(currentMonth, 0, 0)
         this.monthlyFinances.push(monthlyFinance)
       }
 
-      // 重新计算累积净收入
-      this.recalculateCumulativeNet()
+      if (!monthlyFinance.allocated_amounts) {
+        monthlyFinance.allocated_amounts = {}
+      }
+
+      monthlyFinance.allocated_amounts[targetType] =
+        (Number(monthlyFinance.allocated_amounts[targetType]) || 0) + amountNum
+      monthlyFinance.updatedAt = new Date().toISOString()
+
       this.saveToLocalStorage()
     },
 
-    // 重新计算累积净收入
-    recalculateCumulativeNet() {
-      const sortedFinances = this.monthlyFinances.sort((a, b) => a.month.localeCompare(b.month))
-      let cumulative = 0
-      
-      sortedFinances.forEach(mf => {
-        cumulative += mf.netIncome
-        mf.cumulativeNet = cumulative
+    /**
+     * 从「已分配」释放金额回资金池（跨月查找该类型的分配记录）
+     */
+    deallocateFundsFromMonth(sourceType, amount) {
+      let remaining = Number(amount) || 0
+      if (remaining <= 0) return
+
+      const currentMonth = MonthlyFinance.getCurrentMonth()
+      // 优先当前月，再其它月（新→旧）
+      const ordered = [...this.monthlyFinances].sort((a, b) => {
+        if (a.month === currentMonth) return -1
+        if (b.month === currentMonth) return 1
+        return String(b.month).localeCompare(String(a.month))
       })
+
+      for (const monthlyFinance of ordered) {
+        if (remaining <= 0) break
+        if (!monthlyFinance.allocated_amounts) continue
+
+        const currentAllocated = Number(monthlyFinance.allocated_amounts[sourceType]) || 0
+        if (currentAllocated <= 0) continue
+
+        const deduct = Math.min(currentAllocated, remaining)
+        monthlyFinance.allocated_amounts[sourceType] = currentAllocated - deduct
+        remaining -= deduct
+
+        if (monthlyFinance.allocated_amounts[sourceType] <= 0) {
+          delete monthlyFinance.allocated_amounts[sourceType]
+        }
+        monthlyFinance.updatedAt = new Date().toISOString()
+      }
+
+      this.saveToLocalStorage()
     },
 
-    // 从本地存储加载数据
-    loadFromLocalStorage() {
-      const transactions = localStorage.getItem('finance-transactions')
-      const categories = localStorage.getItem('finance-categories')
-      const monthlyFinances = localStorage.getItem('finance-monthly')
+    /**
+     * 从资金池分配到资产类型（更新已分配账本）
+     */
+    allocateFunds(assetType, amount) {
+      const amountNum = Number(amount) || 0
+      const currentPool = this.cashPool
+      if (currentPool < amountNum) {
+        throw new Error(
+          `资金池余额不足，当前余额：¥${currentPool.toFixed(2)}，需要：¥${amountNum.toFixed(2)}`
+        )
+      }
 
-      if (transactions) {
-        this.transactions = JSON.parse(transactions)
-      }
-      if (categories) {
-        this.categories = JSON.parse(categories)
-      }
-      if (monthlyFinances) {
-        const monthlyData = JSON.parse(monthlyFinances)
-        // 确保每个月度财务对象都有正确的结构和方法
-        this.monthlyFinances = monthlyData.map(item => {
-          const mf = new MonthlyFinance(item.month, item.income, item.expense, item.cumulativeNet)
-          // 确保allocated_amounts属性存在
-          if (item.allocated_amounts) {
-            mf.allocated_amounts = item.allocated_amounts
-          } else {
-            mf.allocated_amounts = {}
-          }
-          // 保留其他属性
-          if (item.transfers) mf.transfers = item.transfers
-          if (item.isArchived) mf.isArchived = item.isArchived
-          if (item.createdAt) mf.createdAt = item.createdAt
-          if (item.updatedAt) mf.updatedAt = item.updatedAt
-          return mf
-        })
-      }
+      this.allocateFundsToMonth(assetType, amountNum)
+      return true
     },
 
-    // 保存到本地存储
-    saveToLocalStorage() {
-      localStorage.setItem('finance-transactions', JSON.stringify(this.transactions))
-      localStorage.setItem('finance-categories', JSON.stringify(this.categories))
-      localStorage.setItem('finance-monthly', JSON.stringify(this.monthlyFinances))
+    /**
+     * 从资产类型回收到资金池
+     */
+    deallocateFunds(assetType, amount) {
+      const amountNum = Number(amount) || 0
+      this.deallocateFundsFromMonth(assetType, amountNum)
+      return true
+    },
+
+    getAssetTypeLabel(type) {
+      const labels = {
+        cash_pool: '资金池',
+        bank_deposit: '银行存款',
+        stock_investment: '股票投资',
+        lent_money: '借出资金'
+      }
+      return labels[type] || '未知类型'
+    },
+
+    checkCashPoolBalance(requiredAmount) {
+      const available = this.cashPool
+      const required = Number(requiredAmount) || 0
+      return {
+        sufficient: available >= required,
+        available,
+        required,
+        shortage: Math.max(0, required - available)
+      }
     }
   }
 })

@@ -12,13 +12,15 @@
     "paths": {
       "@/*": ["src/*"]
     },
-    "ignoreDeprecations": "6.0"
+    // 如果编辑器仍报“值无效”，请删除这一行；或换用更低版本字符串：
+    // "ignoreDeprecations": "4.9"
+    // 推荐：暂时移除此属性以恢复 TS 服务
+    // "ignoreDeprecations": "5.0"
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.d.ts",
     "src/**/*.tsx",
-    "src/**/*.vue",
     "src/**/*.js",
     "src/**/*.jsx"
   ],

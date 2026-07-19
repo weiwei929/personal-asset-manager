@@ -204,26 +204,26 @@
               <td class="actions-cell">
                 <div class="action-buttons">
                   <button
-                    v-if="record.status === 'pending'"
-                    class="btn btn-sm btn-success"
-                    @click="markAsReturned(record.id)"
+                    v-if="!record.isReturned"
+                    @click="editRecord(record)"
+                    class="px-3 py-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                   >
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="20,6 9,17 4,12"/>
-                    </svg>
-                    标记已还
-                  </button>
-                  <button class="btn btn-sm btn-secondary" @click="editRecord(record)">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
                     编辑
                   </button>
-                  <button class="btn btn-sm btn-danger" @click="deleteRecord(record.id)">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                    </svg>
+                  
+                  <!-- 新增收回按钮 -->
+                  <button
+                    v-if="!record.isReturned"
+                    @click="showReturnDialog(record)"
+                    class="px-3 py-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 transition-colors"
+                  >
+                    收回
+                  </button>
+                  
+                  <button
+                    @click="deleteRecord(record.id)"
+                    class="px-3 py-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                  >
                     删除
                   </button>
                 </div>
@@ -251,33 +251,65 @@
             </button>
           </div>
           <form @submit.prevent="saveRecord" class="space-y-4">
+            <!-- 资金来源选择 -->
+            <div v-if="!isEditing">
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                资金来源 <span class="text-red-500">*</span>
+              </label>
+              <div class="space-y-2">
+                <label class="flex items-center">
+                  <input
+                    v-model="recordForm.fundSource"
+                    type="radio"
+                    value="cash_pool"
+                    class="mr-2"
+                  />
+                  <span>资金池 (可用余额: ¥{{ formatAmount(availableCash) }})</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    v-model="recordForm.fundSource"
+                    type="radio"
+                    value="external"
+                    class="mr-2"
+                  />
+                  <span>外部资金</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 借款人 -->
             <div>
               <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                借出人 <span class="text-red-500">*</span>
+                借款人 <span class="text-red-500">*</span>
               </label>
               <input
                 v-model="recordForm.borrower"
                 type="text"
-                placeholder="请输入借出人姓名"
+                placeholder="请输入借款人姓名"
                 class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 required
               />
             </div>
 
+            <!-- 借出金额 -->
             <div>
               <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                资金数量 <span class="text-red-500">*</span>
+                借出金额 <span class="text-red-500">*</span>
               </label>
               <input
-                v-model="recordForm.amount"
+                v-model.number="recordForm.amount"
                 type="number"
                 step="0.01"
-                min="0.01"
-                max="99999999.99"
+                :min="0"
+                :max="recordForm.fundSource === 'cash_pool' ? availableCash : undefined"
                 placeholder="请输入借出金额"
                 class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 required
               />
+              <div v-if="recordForm.fundSource === 'cash_pool'" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                最大可用: ¥{{ formatAmount(availableCash) }}
+              </div>
             </div>
 
             <div>
@@ -335,6 +367,148 @@
         </div>
       </div>
     </div>
+
+    <!-- 借款收回对话框 -->
+    <div v-if="showReturnDialogFlag" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" tabindex="-1" @keydown.esc="closeReturnDialog">
+      <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4" role="dialog" aria-modal="true" aria-labelledby="returnDialogTitle">
+        <h3 id="returnDialogTitle" class="text-lg font-semibold text-text-light dark:text-text-dark mb-4">
+          借款收回
+        </h3>
+        
+        <form @submit.prevent="processReturn" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              借款人
+            </label>
+            <input
+              :value="selectedRecord?.borrower"
+              readonly
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-gray-100 dark:bg-gray-700 text-text-light dark:text-text-dark"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              借出本金
+            </label>
+            <input
+              :value="formatAmount(selectedRecord?.amount || 0)"
+              readonly
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-gray-100 dark:bg-gray-700 text-text-light dark:text-text-dark"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              收回类型
+            </label>
+            <div class="space-y-2">
+              <label class="flex items-center">
+                <input
+                  v-model="returnForm.returnType"
+                  type="radio"
+                  value="partial"
+                  class="mr-2"
+                />
+                <span>部分收回</span>
+              </label>
+              <label class="flex items-center">
+                <input
+                  v-model="returnForm.returnType"
+                  type="radio"
+                  value="full"
+                  class="mr-2"
+                />
+                <span>全部收回</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              实际收回金额
+            </label>
+            <input
+              v-model.number="returnForm.actualAmount"
+              type="number"
+              step="0.01"
+              :min="0"
+              :max="returnForm.returnType === 'full' ? undefined : selectedRecord?.amount"
+              placeholder="请输入实际收回的金额"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              required
+            />
+            <div v-if="returnForm.returnType === 'partial'" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              最大可收回: ¥{{ formatAmount(selectedRecord?.amount || 0) }}
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              利息收入
+            </label>
+            <input
+              v-model.number="returnForm.interestIncome"
+              type="number"
+              step="0.01"
+              :min="0"
+              placeholder="利息收入（如有）"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              收回日期
+            </label>
+            <input
+              v-model="returnForm.returnDate"
+              type="date"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+              备注
+            </label>
+            <textarea
+              v-model="returnForm.notes"
+              placeholder="收回说明（可选）"
+              rows="3"
+              class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+            ></textarea>
+          </div>
+
+          <div class="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
+            <p class="text-sm text-green-700 dark:text-green-300">
+              <strong>总收回金额：</strong>¥{{ formatAmount(totalReturnAmount) }}
+            </p>
+            <p class="text-xs text-green-600 dark:text-green-400 mt-1">
+              本金 + 利息将转入资金池
+            </p>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              @click="closeReturnDialog"
+              class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+              aria-label="关闭收回对话框"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            >
+              确认收回
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -342,20 +516,28 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useLentMoneyStore } from '../stores/lentMoney.js'
+import { useFinanceStore } from '../stores/finance.js'
+import { useFundTransferStore } from '../stores/fundTransfer.js'
+import { formatAmount } from '../utils/format.js'
 
 export default {
   name: 'LentMoney',
   setup() {
     const lentMoneyStore = useLentMoneyStore()
+    const financeStore = useFinanceStore()
+    const fundTransferStore = useFundTransferStore()
+    
     const showAddDialog = ref(false)
     const isEditing = ref(false)
+    
     const recordForm = ref({
       id: null,
       borrower: '',
       amount: null,
       lendDate: '',
       expectedReturnDate: '',
-      notes: ''
+      notes: '',
+      fundSource: 'cash_pool' // 新增字段
     })
 
     // 计算属性
@@ -366,6 +548,7 @@ export default {
     const returnedAmount = computed(() => lentMoneyStore.returnedAmount)
     const maturingRecords = computed(() => lentMoneyStore.maturingRecords)
     const overdueRecords = computed(() => lentMoneyStore.overdueRecords)
+    const availableCash = computed(() => financeStore.cashPool)
 
     const formatDate = (dateString) => {
       if (!dateString) return '-'
@@ -373,14 +556,18 @@ export default {
       return date.toLocaleDateString('zh-CN')
     }
 
-    const saveRecord = async () => {
-      // 简单的表单验证
-      if (!recordForm.value.borrower || !recordForm.value.amount || !recordForm.value.lendDate || !recordForm.value.expectedReturnDate) {
-        ElMessage.error('请填写所有必填字段')
-        return
-      }
+    // formatAmount 现统一从 src/utils/format.js 导入使用
 
+    const saveRecord = async () => {
       try {
+        // 验证资金来源
+        if (!isEditing.value && recordForm.value.fundSource === 'cash_pool') {
+          if (recordForm.value.amount > availableCash.value) {
+            ElMessage.error('借出金额超过资金池可用余额')
+            return
+          }
+        }
+
         if (isEditing.value) {
           lentMoneyStore.updateLentRecord(
             recordForm.value.id,
@@ -392,13 +579,26 @@ export default {
           )
           ElMessage.success('借出记录更新成功')
         } else {
-          lentMoneyStore.addLentRecord(
+          // 创建借出记录
+          const recordId = lentMoneyStore.addLentRecord(
             recordForm.value.borrower,
             recordForm.value.amount,
             recordForm.value.lendDate,
             recordForm.value.expectedReturnDate,
             recordForm.value.notes
           )
+
+          // 如果使用资金池，执行资金转换
+          if (recordForm.value.fundSource === 'cash_pool') {
+            await fundTransferStore.performTransfer({
+              fromType: 'cash_pool',
+              toType: 'lent_money',
+              amount: recordForm.value.amount,
+              description: `借出资金给: ${recordForm.value.borrower}`,
+              relatedRecordId: recordId
+            })
+          }
+
           ElMessage.success('借出记录添加成功')
         }
 
@@ -406,6 +606,7 @@ export default {
         resetForm()
       } catch (error) {
         console.error('表单验证失败:', error)
+        ElMessage.error('保存失败，请重试')
       }
     }
 
@@ -416,7 +617,8 @@ export default {
         amount: record.amount,
         lendDate: record.lendDate,
         expectedReturnDate: record.expectedReturnDate,
-        notes: record.notes
+        notes: record.notes,
+        fundSource: record.fundSource || 'cash_pool'
       }
       isEditing.value = true
       showAddDialog.value = true
@@ -485,7 +687,8 @@ export default {
         amount: null,
         lendDate: '',
         expectedReturnDate: '',
-        notes: ''
+        notes: '',
+        fundSource: 'cash_pool'
       }
       isEditing.value = false
     }
@@ -493,6 +696,91 @@ export default {
     onMounted(() => {
       lentMoneyStore.loadFromLocalStorage()
     })
+
+    // 收回相关的响应式数据和方法
+    const showReturnDialogFlag = ref(false)
+    const selectedRecord = ref(null)
+    const returnForm = ref({
+      returnType: 'full',
+      actualAmount: 0,
+      interestIncome: 0,
+      returnDate: new Date().toISOString().split('T')[0],
+      notes: ''
+    })
+
+    // 计算总收回金额
+    const totalReturnAmount = computed(() => {
+      return (returnForm.value.actualAmount || 0) + (returnForm.value.interestIncome || 0)
+    })
+
+    // 显示收回对话框
+    const showReturnDialog = (record) => {
+      selectedRecord.value = record
+      returnForm.value = {
+        returnType: 'full',
+        actualAmount: record.amount,
+        interestIncome: 0,
+        returnDate: new Date().toISOString().split('T')[0],
+        notes: ''
+      }
+      showReturnDialogFlag.value = true
+    }
+
+    // 关闭收回对话框
+    const closeReturnDialog = () => {
+      showReturnDialogFlag.value = false
+      selectedRecord.value = null
+      returnForm.value = {
+        returnType: 'full',
+        actualAmount: 0,
+        interestIncome: 0,
+        returnDate: new Date().toISOString().split('T')[0],
+        notes: ''
+      }
+    }
+
+    // 处理借款收回
+    const processReturn = async () => {
+      try {
+        if (!selectedRecord.value) return
+
+        const record = selectedRecord.value
+        const totalAmount = totalReturnAmount.value
+
+        // 执行资金转换（借出资金收回转入资金池）
+        await fundTransferStore.performTransfer({
+          fromType: 'lent_money',
+          toType: 'cash_pool',
+          amount: totalAmount,
+          description: `借款收回: ${record.borrower} (本金¥${returnForm.value.actualAmount.toLocaleString()}${returnForm.value.interestIncome > 0 ? ` + 利息¥${returnForm.value.interestIncome.toLocaleString()}` : ''})`,
+          relatedRecordId: record.id,
+          transferType: 'return'
+        })
+
+        if (returnForm.value.returnType === 'full') {
+          // 全部收回，标记为已还款
+          lentMoneyStore.markAsReturned(record.id, returnForm.value.returnDate)
+          ElMessage.success(`借款全部收回成功，¥${totalAmount.toLocaleString()} 已转入资金池`)
+        } else {
+          // 部分收回，更新借出金额
+          const remainingAmount = record.amount - returnForm.value.actualAmount
+          lentMoneyStore.updateLentRecord(
+            record.id,
+            record.borrower,
+            remainingAmount,
+            record.lendDate,
+            record.expectedReturnDate,
+            record.notes + `\n部分收回: ¥${returnForm.value.actualAmount.toLocaleString()} (${returnForm.value.returnDate})`
+          )
+          ElMessage.success(`借款部分收回成功，¥${totalAmount.toLocaleString()} 已转入资金池`)
+        }
+
+        closeReturnDialog()
+      } catch (error) {
+        console.error('收回失败:', error)
+        ElMessage.error('收回失败，请重试')
+      }
+    }
 
     return {
       lentRecords,
@@ -506,13 +794,22 @@ export default {
       isEditing,
       recordForm,
       formatDate,
+      formatAmount,
       getStatusClass,
       saveRecord,
       editRecord,
       markAsReturned,
       deleteRecord,
       clearAllRecords,
-      resetForm
+      resetForm,
+      showReturnDialogFlag,
+      selectedRecord,
+      returnForm,
+      totalReturnAmount,
+      showReturnDialog,
+      closeReturnDialog,
+      processReturn,
+      availableCash
     }
   }
 }

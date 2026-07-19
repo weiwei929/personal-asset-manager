@@ -157,6 +157,12 @@
                     编辑
                   </button>
                   <button 
+                    @click="showSellDialog(stock)"
+                    class="text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
+                  >
+                    卖出
+                  </button>
+                  <button 
                     @click="deleteStock(stock.id)"
                     class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                   >
@@ -171,15 +177,16 @@
     </div>
 
     <!-- 新增/编辑股票对话框 -->
-    <div v-if="showAddDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div class="bg-card-light dark:bg-card-dark rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div v-if="showAddDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" tabindex="-1" @keydown.escape="showAddDialog = false">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[70vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="add-stock-title">
         <div class="p-6">
           <div class="flex items-center justify-between mb-6">
-            <h3 class="text-lg font-semibold text-text-light dark:text-text-dark">
+            <h3 id="add-stock-title" class="text-lg font-semibold text-text-light dark:text-text-dark">
               {{ isEditing ? '编辑股票' : '新增股票' }}
             </h3>
             <button 
               @click="showAddDialog = false"
+              aria-label="关闭对话框"
               class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,6 +196,34 @@
           </div>
 
           <form @submit.prevent="saveStock" class="space-y-4">
+            <!-- 资金来源选择 -->
+            <div v-if="!isEditing">
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                资金来源 <span class="text-red-500">*</span>
+              </label>
+              <div class="space-y-2">
+                <label class="flex items-center">
+                  <input
+                    v-model="stockForm.fundSource"
+                    type="radio"
+                    value="cash_pool"
+                    class="mr-2"
+                  />
+                  <span>资金池 (可用余额: ¥{{ formatAmount(availableCash) }})</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    v-model="stockForm.fundSource"
+                    type="radio"
+                    value="external"
+                    class="mr-2"
+                  />
+                  <span>外部资金</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 股票名称 -->
             <div>
               <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
                 股票名称 <span class="text-red-500">*</span>
@@ -202,37 +237,39 @@
               />
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                  当月市值 <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model.number="stockForm.currentValue"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="99999999.99"
-                  placeholder="请输入当月市值"
-                  class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  required
-                />
-              </div>
+            <!-- 当前市值 -->
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                当前市值 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model.number="stockForm.currentValue"
+                type="number"
+                step="0.01"
+                :min="0"
+                placeholder="请输入当前市值"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
 
-              <div>
-                <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                  账户余额 <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model.number="stockForm.accountBalance"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="99999999.99"
-                  placeholder="请输入账户余额"
-                  class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  required
-                />
+            <!-- 账户余额 -->
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                账户余额 <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model.number="stockForm.accountBalance"
+                type="number"
+                step="0.01"
+                :min="0"
+                :max="stockForm.fundSource === 'cash_pool' ? availableCash : undefined"
+                placeholder="请输入账户余额"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+              <div v-if="stockForm.fundSource === 'cash_pool'" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                最大可用: ¥{{ formatAmount(availableCash) }}
               </div>
             </div>
 
@@ -268,6 +305,146 @@
         </div>
       </div>
     </div>
+
+    <!-- 股票卖出对话框 -->
+    <div v-if="showSellDialogFlag" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" tabindex="-1" @keydown.escape="closeSellDialog">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[70vh] overflow-y-auto mx-4" role="dialog" aria-modal="true" aria-labelledby="sell-stock-title">
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 id="sell-stock-title" class="text-lg font-semibold text-text-light dark:text-text-dark">
+              股票卖出
+            </h3>
+            <button @click="closeSellDialog" aria-label="关闭对话框" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+
+          <form @submit.prevent="processSell" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                股票名称
+              </label>
+              <input
+                :value="selectedStock?.name"
+                readonly
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-gray-100 dark:bg-gray-700 text-text-light dark:text-text-dark"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                卖出类型
+              </label>
+              <div class="space-y-2">
+                <label class="flex items-center">
+                  <input
+                    v-model="sellForm.sellType"
+                    type="radio"
+                    value="partial"
+                    class="mr-2"
+                  />
+                  <span>部分卖出</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    v-model="sellForm.sellType"
+                    type="radio"
+                    value="full"
+                    class="mr-2"
+                  />
+                  <span>全部卖出</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="sellForm.sellType === 'partial'">
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                卖出金额
+              </label>
+              <input
+                v-model.number="sellForm.sellAmount"
+                type="number"
+                step="0.01"
+                :min="0.01"
+                :max="selectedStock?.getTotalAssets()"
+                placeholder="请输入卖出金额"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                最大可卖出: ¥{{ formatAmount(selectedStock?.getTotalAssets() || 0) }}
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                实际到账金额
+              </label>
+              <input
+                v-model.number="sellForm.actualAmount"
+                type="number"
+                step="0.01"
+                :min="0"
+                placeholder="扣除手续费后的实际到账金额"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                卖出日期
+              </label>
+              <input
+                v-model="sellForm.sellDate"
+                type="date"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                备注
+              </label>
+              <textarea
+                v-model="sellForm.notes"
+                placeholder="卖出说明（可选）"
+                rows="3"
+                class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              ></textarea>
+            </div>
+
+            <div class="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg">
+              <p class="text-sm text-orange-700 dark:text-orange-300">
+                <strong>到账金额：</strong>¥{{ formatAmount(sellForm.actualAmount || 0) }}
+              </p>
+              <p class="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                {{ sellForm.sellType === 'full' ? '全部卖出后股票记录将被删除' : '部分卖出后将更新股票信息' }}
+              </p>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                @click="closeSellDialog"
+                class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+              >
+                确认卖出
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -275,11 +452,17 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useStockInvestmentStore } from '../stores/stockInvestment.js'
+import { useFinanceStore } from '../stores/finance.js'
+import { useFundTransferStore } from '../stores/fundTransfer.js'
+import { formatAmount } from '../utils/format.js'
 
 export default {
   name: 'StockInvestment',
   setup() {
     const stockStore = useStockInvestmentStore()
+    const financeStore = useFinanceStore()
+    const fundTransferStore = useFundTransferStore()
+    
     const showAddDialog = ref(false)
     const isEditing = ref(false)
 
@@ -288,7 +471,8 @@ export default {
       name: '',
       currentValue: null,
       accountBalance: null,
-      shares: null
+      shares: null,
+      fundSource: 'cash_pool' // 新增字段
     })
 
     // 计算属性
@@ -306,12 +490,26 @@ export default {
       return ((value / totalMarketValue.value) * 100).toFixed(1)
     }
 
+    // 计算可用现金
+    const availableCash = computed(() => financeStore.cashPool)
+
+    // 格式化金额显示
+    // 统一使用 src/utils/format.js 的 formatAmount 工具
+
     const saveStock = async () => {
       try {
         // 简单的表单验证
         if (!stockForm.value.name || !stockForm.value.currentValue || !stockForm.value.accountBalance) {
           ElMessage.error('请填写所有必填字段')
           return
+        }
+
+        // 验证资金来源
+        if (!isEditing.value && stockForm.value.fundSource === 'cash_pool') {
+          if (stockForm.value.accountBalance > availableCash.value) {
+            ElMessage.error('账户余额超过资金池可用余额')
+            return
+          }
         }
 
         if (isEditing.value) {
@@ -323,12 +521,26 @@ export default {
           )
           ElMessage.success('股票信息更新成功')
         } else {
-          stockStore.addStock(
+          // 创建股票记录
+          const stockId = stockStore.addStock(
             stockForm.value.name,
             stockForm.value.currentValue,
             stockForm.value.accountBalance,
             stockForm.value.shares
           )
+
+          // 如果使用资金池，执行资金转换
+          // 新增股票后执行资金转换
+          if (stockForm.value.fundSource === 'cash_pool') {
+            await fundTransferStore.performTransfer({
+              fromType: 'cash_pool',
+              toType: 'stock_investment',
+              amount: stockForm.value.accountBalance,
+              description: `新增股票投资: ${stockForm.value.name}`,
+              relatedRecordId: stockId
+            })
+          }
+
           ElMessage.success('股票添加成功')
         }
 
@@ -382,9 +594,86 @@ export default {
         name: '',
         currentValue: null,
         accountBalance: null,
-        shares: null
+        shares: null,
+        fundSource: 'cash_pool'
       }
       isEditing.value = false
+    }
+
+    // 卖出相关的响应式数据和方法
+    const showSellDialogFlag = ref(false)
+    const selectedStock = ref(null)
+    const sellForm = ref({
+      sellType: 'partial',
+      sellAmount: 0,
+      actualAmount: 0,
+      sellDate: new Date().toISOString().split('T')[0],
+      notes: ''
+    })
+
+    // 显示卖出对话框
+    const showSellDialog = (stock) => {
+      selectedStock.value = stock
+      sellForm.value = {
+        sellType: 'partial',
+        sellAmount: 0,
+        actualAmount: 0,
+        sellDate: new Date().toISOString().split('T')[0],
+        notes: ''
+      }
+      showSellDialogFlag.value = true
+    }
+
+    // 关闭卖出对话框
+    const closeSellDialog = () => {
+      showSellDialogFlag.value = false
+      selectedStock.value = null
+      sellForm.value = {
+        sellType: 'partial',
+        sellAmount: 0,
+        actualAmount: 0,
+        sellDate: new Date().toISOString().split('T')[0],
+        notes: ''
+      }
+    }
+
+    // 方法：processSell（股票卖出）
+    const processSell = async () => {
+    try {
+      if (!selectedStock.value) return
+
+    const stock = selectedStock.value
+    const actualAmount = sellForm.value.actualAmount
+
+    // 执行资金转换（股票变现转回资金池）
+    await fundTransferStore.performTransfer({
+        fromType: 'stock_investment',
+        toType: 'cash_pool',
+        amount: actualAmount,
+        description: `股票卖出: ${stock.name} (${sellForm.value.sellType === 'full' ? '全部' : '部分'}卖出)`,
+        relatedRecordId: stock.id,
+        transferType: 'sell'
+    })
+
+    if (sellForm.value.sellType === 'full') {
+      // 全部卖出，删除股票记录
+      stockStore.removeStock(stock.id)
+      ElMessage.success(`股票全部卖出成功，¥${actualAmount.toLocaleString()} 已转入资金池`)
+    } else {
+      // 部分卖出，更新股票信息
+      const sellAmount = sellForm.value.sellAmount
+      const newCurrentValue = Math.max(0, stock.currentValue - sellAmount)
+      const newAccountBalance = stock.accountBalance + actualAmount - sellAmount
+      
+      stockStore.updateStock(stock.id, newCurrentValue, newAccountBalance, stock.shares)
+      ElMessage.success(`股票部分卖出成功，¥${actualAmount.toLocaleString()} 已转入资金池`)
+    }
+
+    closeSellDialog()
+    } catch (error) {
+    console.error('卖出失败:', error)
+    ElMessage.error('卖出失败，请重试')
+    }
     }
 
     onMounted(() => {
@@ -407,7 +696,15 @@ export default {
       editStock,
       deleteStock,
       clearAllStocks,
-      resetForm
+      resetForm,
+      availableCash,
+      formatAmount,
+      showSellDialogFlag,
+      selectedStock,
+      sellForm,
+      showSellDialog,
+      closeSellDialog,
+      processSell
     }
   }
 }

@@ -3,20 +3,17 @@
  * 用于清除所有本地存储数据，重置系统到初始状态
  */
 
-// 所有需要清理的localStorage键
+// 必须与各 store 实际写入的 key 一致（历史曾用错误键名导致重置不干净）
 const STORAGE_KEYS = [
+  'monthlyFinances',
   'bank-deposits',
-  'finance-monthly', 
-  'lent-money-records',
-  'finance-transactions',
-  'fundTransfers',
-  'finance-categories',
   'stock-investments',
-  'financeStore',
-  'bankDepositStore',
-  'fundTransferStore',
-  'stockInvestmentStore',
-  'lentMoneyStore'
+  'lent-money-records',
+  'fundTransfers',
+  // 兼容旧键名（若存在一并清除）
+  'bankDeposits',
+  'stockInvestments',
+  'lentMoneys'
 ]
 
 // 默认分类数据（保留基础分类）
@@ -233,11 +230,18 @@ export function showResetConfirmDialog(onConfirm) {
 
 // 控制台快捷命令
 if (typeof window !== 'undefined') {
-  window.resetData = clearAllData
-  window.checkData = checkDataStatus
   window.dataReset = {
     clear: clearAllData,
     check: checkDataStatus,
     report: generateResetReport
   }
+  
+  // 兼容旧的命令
+  window.resetData = clearAllData
+  
+  console.log('🛠️ 数据重置工具已加载')
+  console.log('💡 可用命令:')
+  console.log('   window.dataReset.clear() - 清除所有数据')
+  console.log('   window.dataReset.check() - 检查数据状态')
+  console.log('   window.dataReset.report() - 生成重置报告')
 }

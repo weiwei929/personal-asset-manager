@@ -1,22 +1,34 @@
 <template>
-  <div class="p-6 space-y-6">
-    <!-- 页面头部 -->
-    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">月度收支管理</h1>
-        <select 
-          v-model="selectedMonth" 
-          @change="loadMonthData" 
-          class="px-3 py-2 bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-        >
-          <option
-            v-for="month in availableMonths"
-            :key="month.value"
-            :value="month.value"
-          >
-            {{ month.label }}
-          </option>
-        </select>
+  <div class="monthly-finance">
+    <!-- 当前月份显示 -->
+    <div class="mb-6">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+        {{ MonthlyFinance.formatMonth(selectedMonth) }}收支管理
+      </h2>
+      <p class="text-gray-600 dark:text-gray-400 mt-1">
+        管理您的月度收入和支出数据，构建资金池
+      </p>
+    </div>
+    
+    <!-- 资金池提示 -->
+    <div v-if="monthlyFinance" class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm text-blue-700 dark:text-blue-300">
+            💡 本月净收入将自动加入资金池
+          </p>
+          <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">
+            净收入 = 收入 - 支出 = ¥{{ formatAmount(monthlyFinance.netIncome) }}
+          </p>
+        </div>
+        <div class="text-right">
+          <p class="text-sm font-semibold text-blue-700 dark:text-blue-300">
+            当前资金池
+          </p>
+          <p class="text-lg font-bold text-blue-600">
+            ¥{{ formatAmount(financeStore.cashPool) }}
+          </p>
+        </div>
       </div>
     </div>
 
@@ -210,207 +222,91 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import { useFinanceStore } from '../stores/finance.js'
-import MonthlyFinance from '../models/MonthlyFinance.js'
+import { formatAmount } from '../utils/format.js'
+import MonthlyFinance from '@/models/MonthlyFinance'
 
-export default {
-  name: 'MonthlyFinance',
-  setup() {
-    const financeStore = useFinanceStore()
-    const saving = ref(false)
+const financeStore = useFinanceStore()
 
-    const selectedMonth = ref(MonthlyFinance.getCurrentMonth())
+// 响应式数据
+const selectedMonth = ref(MonthlyFinance.getCurrentMonth())
+const financeForm = ref({
+  income: 0,
+  expense: 0
+})
+const saving = ref(false)
 
-    const financeForm = ref({
-      income: 0,
-      expense: 0
-    })
+// 计算属性
+const monthlyFinance = computed(() => {
+  return financeStore.monthlyFinances.find(mf => mf.month === selectedMonth.value) || 
+    new MonthlyFinance(selectedMonth.value, 0, 0)
+})
 
-    // 计算属性
-    const currentMonthFinance = computed(() => financeStore.currentMonthFinance)
-    const monthlyFinancesByMonth = computed(() => financeStore.monthlyFinancesByMonth)
-    const totalCumulativeNet = computed(() => financeStore.totalCumulativeNet)
+const currentMonthFinance = computed(() => {
+  const current = financeStore.monthlyFinances.find(mf => mf.month === selectedMonth.value)
+  return current || { income: 0, expense: 0, netIncome: 0 }
+})
 
-    // 生成可用月份选项（最近12个月）
-    const availableMonths = computed(() => {
-      const months = []
-      const current = new Date()
+const totalCumulativeNet = computed(() => financeStore.totalCumulativeNet)
 
-      for (let i = 0; i < 12; i++) {
-        const date = new Date(current.getFullYear(), current.getMonth() - i, 1)
-        const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        months.push({
-          value: monthStr,
-          label: MonthlyFinance.formatMonth(monthStr)
-        })
-      }
-
-      return months
-    })
-
-    const loadMonthData = () => {
-      const existingFinance = financeStore.monthlyFinances.find(mf => mf.month === selectedMonth.value)
-      if (existingFinance) {
-        financeForm.value = {
-          income: existingFinance.income,
-          expense: existingFinance.expense
-        }
-      } else {
-        financeForm.value = {
-          income: 0,
-          expense: 0
-        }
-      }
-    }
-
-    const saveMonthlyFinance = async () => {
-      // 简单验证
-      if (financeForm.value.income < 0 || financeForm.value.expense < 0) {
-        ElMessage.error('收入和支出不能为负数')
-        return
-      }
-
-      try {
-        saving.value = true
-
-        financeStore.updateMonthlyFinance(
-          selectedMonth.value,
-          financeForm.value.income || 0,
-          financeForm.value.expense || 0
-        )
-
-        ElMessage.success('月度收支保存成功')
-      } catch (error) {
-        console.error('保存失败:', error)
-        ElMessage.error('保存失败，请重试')
-      } finally {
-        saving.value = false
-      }
-    }
-
-    const editMonth = (monthlyFinance) => {
-      selectedMonth.value = monthlyFinance.month
-      financeForm.value = {
-        income: monthlyFinance.income,
-        expense: monthlyFinance.expense
-      }
-    }
-
-    const resetForm = () => {
-      financeForm.value = {
-        income: 0,
-        expense: 0
-      }
-    }
-
-    onMounted(() => {
-      financeStore.loadFromLocalStorage()
-      loadMonthData()
-    })
-
+const monthlyFinancesByMonth = computed(() => {
+  const sorted = [...financeStore.monthlyFinances].sort((a, b) => b.month.localeCompare(a.month))
+  return sorted.map((mf, index, arr) => {
+    const cumulativeNet = arr.slice(index).reduce((sum, item) => sum + item.netIncome, 0)
     return {
-      selectedMonth,
-      financeForm,
-      saving,
-      currentMonthFinance,
-      monthlyFinancesByMonth,
-      totalCumulativeNet,
-      availableMonths,
-      loadMonthData,
-      saveMonthlyFinance,
-      editMonth,
-      resetForm,
-      MonthlyFinance
+      ...mf,
+      cumulativeNet
     }
+  })
+})
+
+// 方法
+const saveMonthlyFinance = async () => {
+  try {
+    saving.value = true
+    
+    financeStore.updateMonthlyFinance(
+      selectedMonth.value,
+      financeForm.value.income || 0,
+      financeForm.value.expense || 0
+    )
+    
+    alert('月度收支保存成功')
+  } catch (error) {
+    alert('保存失败: ' + error.message)
+  } finally {
+    saving.value = false
   }
 }
+
+const resetForm = () => {
+  financeForm.value = {
+    income: 0,
+    expense: 0
+  }
+}
+
+const editMonth = (row) => {
+  selectedMonth.value = row.month
+  financeForm.value = {
+    income: row.income,
+    expense: row.expense
+  }
+}
+
+// 生命周期
+onMounted(() => {
+  financeStore.loadFromLocalStorage()
+  
+  // 初始化表单数据
+  const existing = financeStore.monthlyFinances.find(mf => mf.month === selectedMonth.value)
+  if (existing) {
+    financeForm.value = {
+      income: existing.income,
+      expense: existing.expense
+    }
+  }
+})
 </script>
-
-<style scoped>
-.monthly-finance {
-  margin: 0 auto;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.stats-section {
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  height: 100px;
-}
-
-.stat-content {
-  display: flex;
-  align-items: center;
-  height: 100%;
-}
-
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 15px;
-  font-size: 20px;
-}
-
-.income-card .stat-icon {
-  background-color: #f0f9ff;
-  color: #67C23A;
-}
-
-.expense-card .stat-icon {
-  background-color: #fef0f0;
-  color: #F56C6C;
-}
-
-.net-card .stat-icon {
-  background-color: #f5f7fa;
-  color: #409EFF;
-}
-
-.stat-info {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.stat-value.positive {
-  color: #67C23A;
-}
-
-.stat-value.negative {
-  color: #F56C6C;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-top: 4px;
-}
-
-.positive-text {
-  color: #67C23A;
-  font-weight: bold;
-}
-
-.negative-text {
-  color: #F56C6C;
-  font-weight: bold;
-}
-</style>

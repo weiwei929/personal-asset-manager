@@ -1,13 +1,14 @@
 <template>
   <!-- 资金转换对话框 -->
-  <div v-if="visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+  <div v-if="visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" tabindex="-1" @keydown.esc="handleClose">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="transferDialogTitle">
       <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+        <h3 id="transferDialogTitle" class="text-lg font-semibold text-gray-900 dark:text-white">
           资金转换
         </h3>
         <button
           @click="handleClose"
+          aria-label="关闭资金转换对话框"
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -17,19 +18,42 @@
       </div>
 
       <div class="p-6">
-        <!-- 转换信息概览 -->
-        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-sm text-gray-600 dark:text-gray-400">当前净收入:</span>
-            <span class="font-semibold text-gray-900 dark:text-white">¥{{ formatAmount(currentMonthFinance.netIncome || 0) }}</span>
-          </div>
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-sm text-gray-600 dark:text-gray-400">已分配金额:</span>
-            <span class="font-semibold text-gray-900 dark:text-white">¥{{ formatAmount((currentMonthFinance.getAllocatedAmount && currentMonthFinance.getAllocatedAmount()) || 0) }}</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-sm text-gray-600 dark:text-gray-400">可用金额:</span>
-            <span class="font-semibold text-green-600 dark:text-green-400 text-lg">¥{{ formatAmount(availableAmount) }}</span>
+        <!-- 资金池状态概览 -->
+        <div class="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 p-4 rounded-lg mb-6">
+          <h4 class="font-semibold text-gray-900 dark:text-white mb-3">💰 资金池状态</h4>
+          
+          <div class="space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-gray-600 dark:text-gray-400">
+                {{ financeStore.currentMonthLabel }}:
+              </span>
+              <span class="font-semibold text-gray-900 dark:text-white">
+                ¥{{ formatAmount(financeStore.currentMonthNet.amount) }}
+              </span>
+            </div>
+            
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-gray-600 dark:text-gray-400">历史累积:</span>
+              <span class="font-semibold text-gray-900 dark:text-white">
+                ¥{{ formatAmount(financeStore.totalCumulativeNet) }}
+              </span>
+            </div>
+            
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-gray-600 dark:text-gray-400">已分配:</span>
+              <span class="font-semibold text-gray-900 dark:text-white">
+                ¥{{ formatAmount(financeStore.totalAllocatedAmount) }}
+              </span>
+            </div>
+            
+            <div class="border-t pt-2 mt-2">
+              <div class="flex justify-between items-center">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">可用资金池:</span>
+                <span class="font-bold text-green-600 dark:text-green-400 text-lg">
+                  ¥{{ formatAmount(availableAmount) }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -89,7 +113,7 @@
               required
             />
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              最大可转换: ¥{{ formatAmount(maxAmount) }}
+              最大可转换: ¥{{ formatAmount(maxAmount) }} (来自资金池)
             </div>
           </div>
 
@@ -129,7 +153,7 @@
             <button
               type="submit"
               :disabled="loading"
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {{ loading ? '转换中...' : '确认转换' }}
             </button>
@@ -140,187 +164,123 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
 import { useFundTransferStore } from '../stores/fundTransfer.js'
 import { useFinanceStore } from '../stores/finance.js'
+import { ElMessage } from 'element-plus'
+import { formatAmount } from '../utils/format.js'
 
-export default {
-  name: 'TransferDialog',
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false
-    },
-    currentMonth: {
-      type: String,
-      default: () => new Date().toISOString().slice(0, 7)
-    }
+// Props 和 Emits
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
   },
-  emits: ['update:modelValue', 'success'],
-  setup(props, { emit }) {
-    const fundTransferStore = useFundTransferStore()
-    const financeStore = useFinanceStore()
+  currentMonth: {
+    type: String,
+    default: () => new Date().toISOString().slice(0, 7)
+  }
+})
+
+const emit = defineEmits(['update:modelValue', 'success'])
+
+const fundTransferStore = useFundTransferStore()
+const financeStore = useFinanceStore()
     
-    const formRef = ref()
-    const loading = ref(false)
+const loading = ref(false)
     
-    // 表单数据
-    const form = ref({
-      fromType: 'net-income',
-      toType: '',
-      amount: 0,
-      description: '',
-      date: new Date()
-    })
+// 表单数据
+const form = ref({
+  fromType: 'net-income',
+  toType: '',
+  amount: 0,
+  description: '',
+  date: new Date().toISOString().slice(0, 10)
+})
 
-    // 表单验证规则
-    const rules = {
-      fromType: [
-        { required: true, message: '请选择来源资金类型', trigger: 'change' }
-      ],
-      toType: [
-        { required: true, message: '请选择目标资金类型', trigger: 'change' }
-      ],
-      amount: [
-        { required: true, message: '请输入转换金额', trigger: 'blur' },
-        { type: 'number', min: 0.01, message: '转换金额必须大于0', trigger: 'blur' }
-      ],
-      date: [
-        { required: true, message: '请选择转换日期', trigger: 'change' }
-      ]
+// 来源资金类型选项
+const fromTypeOptions = [
+  { value: 'net-income', label: '月度净收入' },
+  { value: 'bank_deposit', label: '银行存款' },
+  { value: 'stock_investment', label: '股票投资' },
+  { value: 'lent_money', label: '借出资金' }
+]
+
+// 目标资金类型选项（排除来源类型）
+const toTypeOptions = computed(() => {
+  return fromTypeOptions.filter(option => option.value !== form.value.fromType)
+})
+
+// 计算属性
+const visible = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value)
+})
+
+const availableAmount = computed(() => financeStore.cashPool)
+const maxAmount = computed(() => availableAmount.value)
+
+// 监听来源类型变化，重置目标类型
+watch(() => form.value.fromType, () => {
+  form.value.toType = ''
+  form.value.amount = 0
+})
+
+// 统一使用 src/utils/format.js 的 formatAmount 工具
+// 处理关闭
+const handleClose = () => {
+  visible.value = false
+  resetForm()
+}
+
+// 重置表单
+const resetForm = () => {
+    if (formRef.value) {
+      formRef.value.clearValidate()
+    }
+}
+
+// 处理提交
+const handleSubmit = async () => {
+  try {
+    // 金额验证
+    if (form.value.amount <= 0) {
+      alert('请输入有效的转换金额')
+      return
+    }
+    
+    if (form.value.amount > maxAmount.value) {
+      alert('转换金额超过可用余额')
+      return
     }
 
-    // 来源资金类型选项
-    const fromTypeOptions = [
-      { value: 'net-income', label: '月度净收入' },
-      { value: 'bank_deposit', label: '银行存款' },
-      { value: 'stock_investment', label: '股票投资' },
-      { value: 'lent_money', label: '借出资金' }
-    ]
-
-    // 目标资金类型选项（排除来源类型）
-    const toTypeOptions = computed(() => {
-      return fromTypeOptions.filter(option => option.value !== form.value.fromType)
-    })
-
-    // 计算属性
-    const visible = computed({
-      get: () => props.modelValue,
-      set: (value) => emit('update:modelValue', value)
-    })
-
-    const currentMonthFinance = computed(() => {
-      return financeStore.monthlyFinances.find(mf => mf.month === props.currentMonth) || 
-        { income: 0, expense: 0, netIncome: 0, getAllocatedAmount: () => 0, getAvailableAmount: () => 0 }
-    })
-
-    const availableAmount = computed(() => {
-      if (form.value.fromType === 'net-income') {
-        const finance = financeStore.monthlyFinances.find(mf => mf.month === props.currentMonth)
-        if (finance && typeof finance.getAvailableAmount === 'function') {
-          return finance.getAvailableAmount()
-        }
-        // 回退计算方法：净收入 - 已分配金额
-        const netIncome = finance?.netIncome || 0
-        const allocated = (finance?.allocated_amounts && Object.values(finance.allocated_amounts).reduce((sum, amount) => sum + amount, 0)) || 0
-        return Math.max(0, netIncome - allocated)
-      }
-      // 其他资金类型的可用金额需要单独计算，暂时返回0
-      return 0
-    })
-
-    const maxAmount = computed(() => {
-      return availableAmount.value
-    })
-
-    // 监听来源类型变化，重置目标类型
-    watch(() => form.value.fromType, () => {
-      form.value.toType = ''
-      form.value.amount = 0
-    })
-
-    // 格式化金额显示
-    const formatAmount = (amount) => {
-      return new Intl.NumberFormat('zh-CN', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(amount || 0)
+    if (!form.value.fromType || !form.value.toType) {
+      alert('请选择来源和目标资金类型')
+      return
     }
 
-    // 重置表单
-    const resetForm = () => {
-      form.value = {
-        fromType: 'net-income',
-        toType: '',
-        amount: 0,
-        description: '',
-        date: new Date()
-      }
-      if (formRef.value) {
-        formRef.value.clearValidate()
-      }
+    loading.value = true
+
+    // 创建转换记录
+    const transferData = {
+      fromType: form.value.fromType,
+      toType: form.value.toType,
+      amount: form.value.amount,
+      description: form.value.description,
+      date: form.value.date,
+      month: props.currentMonth
     }
 
-    // 处理关闭
-    const handleClose = () => {
-      resetForm()
-      visible.value = false
-    }
+    await fundTransferStore.performTransfer(transferData)
 
-    // 处理提交
-    const handleSubmit = async () => {
-      if (!formRef.value) return
-
-      try {
-        // 表单验证
-        await formRef.value.validate()
-        
-        // 金额验证
-        if (form.value.amount > maxAmount.value) {
-          ElMessage.error('转换金额超过可用余额')
-          return
-        }
-
-        loading.value = true
-
-        // 创建转换记录
-        const transferData = {
-          fromType: form.value.fromType,
-          toType: form.value.toType,
-          amount: form.value.amount,
-          description: form.value.description,
-          date: form.value.date
-        }
-
-        await fundTransferStore.addTransfer(transferData)
-
-        ElMessage.success('资金转换成功')
-        emit('success')
-        handleClose()
-      } catch (error) {
-        ElMessage.error(error.message || '转换失败')
-      } finally {
-        loading.value = false
-      }
-    }
-
-    return {
-      formRef,
-      loading,
-      form,
-      rules,
-      visible,
-      fromTypeOptions,
-      toTypeOptions,
-      currentMonthFinance,
-      availableAmount,
-      maxAmount,
-      formatAmount,
-      handleClose,
-      handleSubmit
-    }
+    ElMessage.success('资金转换成功！')
+    emit('success')
+    handleClose()
+  } catch (error) {
+    ElMessage.error(error.message || '转换失败')
+  } finally {
+    loading.value = false
   }
 }
 </script>

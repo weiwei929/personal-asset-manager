@@ -48,14 +48,26 @@ export const useLentMoneyStore = defineStore('lentMoney', {
       return result;
     },
 
-    // 统计信息
-    statistics: (state) => ({
-      totalRecords: state.lentRecords.length,
-      pendingRecords: state.lentRecords.filter(r => r.status === 'pending').length,
-      returnedRecords: state.lentRecords.filter(r => r.status === 'returned').length,
-      maturingRecords: state.maturingRecords.length,
-      overdueRecords: state.overdueRecords.length
-    })
+    // 统计信息（不依赖其它 getter，避免 state.xxxGetter 失效）
+    statistics: (state) => {
+      const pending = state.lentRecords.filter(r => r.status === 'pending')
+      const returned = state.lentRecords.filter(r => r.status === 'returned')
+      const maturing = state.lentRecords.filter(record => {
+        if (typeof record.isMaturingSoon === 'function') return record.isMaturingSoon()
+        return false
+      })
+      const overdue = state.lentRecords.filter(record => {
+        if (typeof record.isOverdue === 'function') return record.isOverdue()
+        return false
+      })
+      return {
+        totalRecords: state.lentRecords.length,
+        pendingRecords: pending.length,
+        returnedRecords: returned.length,
+        maturingRecords: maturing.length,
+        overdueRecords: overdue.length
+      }
+    }
   },
 
   actions: {
@@ -64,6 +76,7 @@ export const useLentMoneyStore = defineStore('lentMoney', {
       const record = LentMoney.create(borrower, amount, lendDate, expectedReturnDate, notes);
       this.lentRecords.push(record);
       this.saveToLocalStorage();
+      return record.id;
     },
 
     // 更新借出资金记录

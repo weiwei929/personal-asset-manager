@@ -4,301 +4,203 @@
  */
 
 import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
 import FundTransfer from '../models/FundTransfer.js'
+import { useFinanceStore } from './finance.js'
 
-export const useFundTransferStore = defineStore('fundTransfer', {
-  state: () => ({
-    transfers: [], // 所有转换记录
-    loading: false,
-    error: null
-  }),
+export const useFundTransferStore = defineStore('fundTransfer', () => {
+  // 状态
+  const transfers = ref([])
+  const loading = ref(false)
 
-  getters: {
-    /**
-     * 获取指定月份的转换记录
-     */
-    getTransfersByMonth: (state) => (month) => {
-      return state.transfers.filter(transfer => transfer.month === month)
-    },
+  // 计算属性
+  const transferHistory = computed(() => {
+    return transfers.value
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .map(transfer => ({
+        ...transfer,
+        fromLabel: transfer.getAssetTypeLabel(transfer.fromType),
+        toLabel: transfer.getAssetTypeLabel(transfer.toType),
+        typeLabel: transfer.getTransferTypeLabel()
+      }))
+  })
 
-    /**
-     * 获取指定年份的转换记录
-     */
-    getTransfersByYear: (state) => (year) => {
-      return state.transfers.filter(transfer => transfer.year === year)
-    },
+  const totalTransferAmount = computed(() => {
+    return transfers.value.reduce((sum, transfer) => sum + transfer.amount, 0)
+  })
 
-    /**
-     * 获取指定月份的总转换金额
-     */
-    getTotalTransferredByMonth: (state) => (month) => {
-      return state.transfers
-        .filter(transfer => transfer.month === month && transfer.status === 'completed')
-        .reduce((sum, transfer) => sum + transfer.amount, 0)
-    },
-
-    /**
-     * 获取按目标类型分组的转换统计
-     */
-    getTransferStatsByType: (state) => (month) => {
-      const monthTransfers = state.transfers.filter(
-        transfer => transfer.month === month && transfer.status === 'completed'
-      )
-      
-      const stats = {}
-      monthTransfers.forEach(transfer => {
-        if (!stats[transfer.toType]) {
-          stats[transfer.toType] = 0
-        }
-        stats[transfer.toType] += transfer.amount
-      })
-      
-      return stats
-    },
-
-    /**
-     * 获取最近的转换记录
-     */
-    getRecentTransfers: (state) => (limit = 10) => {
-      return [...state.transfers]
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .slice(0, limit)
+  // 方法
+  const loadTransfers = () => {
+    try {
+      const stored = localStorage.getItem('fundTransfers')
+      if (stored) {
+        const data = JSON.parse(stored)
+        transfers.value = data.map(item => FundTransfer.fromJSON(item))
+      }
+    } catch (error) {
+      console.error('加载资金转换记录失败:', error)
+      transfers.value = []
     }
-  },
+  }
 
-  actions: {
-    /**
-     * 从本地存储加载数据
-     */
-    loadFromLocalStorage() {
-      try {
-        const stored = localStorage.getItem('fundTransfers')
-        if (stored) {
-          const data = JSON.parse(stored)
-          this.transfers = data.map(item => FundTransfer.fromJSON(item))
-        }
-      } catch (error) {
-        console.error('加载资金转换数据失败:', error)
-        this.error = '加载数据失败'
+  const saveTransfers = () => {
+    try {
+      const data = transfers.value.map(transfer => transfer.toJSON())
+      localStorage.setItem('fundTransfers', JSON.stringify(data))
+    } catch (error) {
+      console.error('保存资金转换记录失败:', error)
+      throw error
+    }
+  }
+
+  const addTransfer = (transferData) => {
+    try {
+      const transfer = new FundTransfer(transferData)
+      const validation = transfer.validate()
+      
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join(', '))
       }
-    },
 
-    /**
-     * 保存到本地存储
-     */
-    saveToLocalStorage() {
-      try {
-        const data = this.transfers.map(transfer => transfer.toJSON())
-        localStorage.setItem('fundTransfers', JSON.stringify(data))
-      } catch (error) {
-        console.error('保存资金转换数据失败:', error)
-        this.error = '保存数据失败'
-      }
-    },
+      transfers.value.push(transfer)
+      saveTransfers()
+      
+      console.log('✅ 资金转换记录已添加:', transfer)
+      return transfer
+    } catch (error) {
+      console.error('添加资金转换记录失败:', error)
+      throw error
+    }
+  }
 
-    /**
-     * 添加新的转换记录
-     */
-    async addTransfer(transferData) {
-      try {
-        this.loading = true
-        this.error = null
+  const performTransfer = async (transferData) => {
+    loading.value = true
+    let ledgerApplied = null // 'allocate' | 'deallocate' | null
 
-        // 创建转换记录
-        const transfer = new FundTransfer(transferData)
-        
-        // 验证数据
-        const validation = transfer.validate()
-        if (!validation.isValid) {
-          throw new Error(validation.errors.join(', '))
-        }
-
-        // 执行实际的资产转换操作
-        await this.executeTransfer(transfer)
-
-        // 添加到转换记录列表
-        this.transfers.push(transfer)
-        
-        // 保存到本地存储
-        this.saveToLocalStorage()
-        
-        return transfer
-      } catch (error) {
-        this.error = error.message
-        throw error
-      } finally {
-        this.loading = false
-      }
-    },
-
-    /**
-     * 执行实际的资产转换操作
-     */
-    async executeTransfer(transfer) {
-      const { useFinanceStore } = await import('./finance.js')
-      const { useBankDepositStore } = await import('./bankDeposit.js')
-      const { useStockInvestmentStore } = await import('./stockInvestment.js')
-      const { useLentMoneyStore } = await import('./lentMoney.js')
-
+    try {
       const financeStore = useFinanceStore()
-      const bankDepositStore = useBankDepositStore()
-      const stockStore = useStockInvestmentStore()
-      const lentMoneyStore = useLentMoneyStore()
-
-      // 从月度余额中扣除
-      if (transfer.fromType === 'net-income') {
-        // 找到实际的月度财务对象
-        const currentMonth = transfer.month
-        const financeIndex = financeStore.monthlyFinances.findIndex(mf => mf.month === currentMonth)
-        
-        if (financeIndex === -1) {
-          throw new Error('当前月度财务记录不存在')
-        }
-
-        const currentFinance = financeStore.monthlyFinances[financeIndex]
-
-        // 检查可用余额
-        const availableAmount = currentFinance.getAvailableAmount ? currentFinance.getAvailableAmount() : 
-          (currentFinance.netIncome - (currentFinance.getAllocatedAmount ? currentFinance.getAllocatedAmount() : 0))
-        
-        if (transfer.amount > availableAmount) {
-          throw new Error('转换金额超过可用余额')
-        }
-
-        // 记录转换金额（从月度余额中减少）
-        if (!currentFinance.allocated_amounts) {
-          currentFinance.allocated_amounts = {}
-        }
-        
-        const currentAllocated = currentFinance.allocated_amounts[transfer.toType] || 0
-        currentFinance.allocated_amounts[transfer.toType] = currentAllocated + transfer.amount
-
-        // 保存更新
-        financeStore.saveToLocalStorage()
+      const payload = {
+        fromType: transferData.fromType,
+        toType: transferData.toType,
+        amount: transferData.amount,
+        description: transferData.description || '',
+        transferType: transferData.transferType || 'manual',
+        relatedRecordId: transferData.relatedRecordId,
+        date: transferData.date || new Date().toISOString()
       }
 
-      // 向目标资产类型中增加
-      switch (transfer.toType) {
-        case 'bank_deposit':
-          // 添加银行存款记录
-          await bankDepositStore.addDeposit(
-            `转换存款-${transfer.date.slice(0, 10)}`,  // productName
-            new Date(new Date(transfer.date).getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // maturityDate (1年后)
-            transfer.amount,  // amount
-            0,  // interestRate
-            '1年',  // term
-            0,  // maturityInterest
-            `从月度余额转换: ${transfer.description}`  // notes
+      // 1. 先校验记录结构，避免账本已改但历史写入失败
+      const preview = new FundTransfer(payload)
+      const validation = preview.validate()
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join(', '))
+      }
+
+      // 2. 资金池余额
+      if (payload.fromType === 'cash_pool') {
+        const balanceCheck = financeStore.checkCashPoolBalance(payload.amount)
+        if (!balanceCheck.sufficient) {
+          throw new Error(
+            `资金池余额不足，当前余额：¥${balanceCheck.available.toFixed(2)}，需要：¥${balanceCheck.required.toFixed(2)}`
           )
-          break
-
-        case 'stock_investment':
-          // 添加股票投资记录
-          await stockStore.addInvestment({
-            stockName: '资金转换',
-            stockCode: 'TRANSFER',
-            purchasePrice: 1,
-            quantity: transfer.amount,
-            totalAmount: transfer.amount,
-            purchaseDate: transfer.date,
-            description: `从月度余额转换: ${transfer.description}`,
-            month: transfer.month
-          })
-          break
-
-        case 'lent_money':
-          // 添加借出资金记录
-          await lentMoneyStore.addLentMoney({
-            borrowerName: '资金转换',
-            amount: transfer.amount,
-            lendDate: transfer.date,
-            expectedReturnDate: new Date(new Date(transfer.date).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 默认30天后
-            interestRate: 0,
-            description: `从月度余额转换: ${transfer.description}`,
-            month: transfer.month
-          })
-          break
-
-        default:
-          throw new Error(`不支持的转换目标类型: ${transfer.toType}`)
+        }
       }
-    },
 
-    /**
-     * 更新转换记录
-     */
-    async updateTransfer(id, updateData) {
+      // 3. 更新已分配账本
+      if (payload.fromType === 'cash_pool') {
+        financeStore.allocateFunds(payload.toType, payload.amount)
+        ledgerApplied = 'allocate'
+      } else if (payload.toType === 'cash_pool') {
+        financeStore.deallocateFunds(payload.fromType, payload.amount)
+        ledgerApplied = 'deallocate'
+      }
+
+      // 4. 写入转换历史
+      let transfer
       try {
-        this.loading = true
-        this.error = null
-
-        const index = this.transfers.findIndex(t => t.id === id)
-        if (index === -1) {
-          throw new Error('转换记录不存在')
+        transfer = addTransfer(payload)
+      } catch (historyError) {
+        // 回滚账本，避免「扣了池子却没有流水」
+        if (ledgerApplied === 'allocate') {
+          financeStore.deallocateFunds(payload.toType, payload.amount)
+        } else if (ledgerApplied === 'deallocate') {
+          financeStore.allocateFunds(payload.fromType, payload.amount)
         }
-
-        // 更新数据
-        Object.assign(this.transfers[index], updateData)
-        
-        // 验证更新后的数据
-        const validation = this.transfers[index].validate()
-        if (!validation.isValid) {
-          throw new Error(validation.errors.join(', '))
-        }
-
-        // 保存到本地存储
-        this.saveToLocalStorage()
-        
-        return this.transfers[index]
-      } catch (error) {
-        this.error = error.message
-        throw error
-      } finally {
-        this.loading = false
+        throw historyError
       }
-    },
 
-    /**
-     * 删除转换记录
-     */
-    async deleteTransfer(id) {
-      try {
-        this.loading = true
-        this.error = null
-
-        const index = this.transfers.findIndex(t => t.id === id)
-        if (index === -1) {
-          throw new Error('转换记录不存在')
-        }
-
-        // 从列表中移除
-        this.transfers.splice(index, 1)
-        
-        // 保存到本地存储
-        this.saveToLocalStorage()
-        
-        return true
-      } catch (error) {
-        this.error = error.message
-        throw error
-      } finally {
-        this.loading = false
+      return {
+        success: true,
+        transfer,
+        message: '资金转换成功'
       }
-    },
-
-    /**
-     * 取消转换记录
-     */
-    async cancelTransfer(id) {
-      await this.updateTransfer(id, { status: 'cancelled' })
-      return true
-    },
-
-    /**
-     * 清除错误信息
-     */
-    clearError() {
-      this.error = null
+    } catch (error) {
+      console.error('资金转换失败:', error)
+      return {
+        success: false,
+        error: error.message,
+        message: error.message || '资金转换失败'
+      }
+    } finally {
+      loading.value = false
     }
+  }
+
+  const getTransfersByAsset = (assetType, recordId = null) => {
+    return transfers.value.filter(transfer => {
+      const matchesType = transfer.fromType === assetType || transfer.toType === assetType
+      const matchesRecord = recordId ? transfer.relatedRecordId === recordId : true
+      return matchesType && matchesRecord
+    })
+  }
+
+  const deleteTransfer = (transferId) => {
+    try {
+      const index = transfers.value.findIndex(t => t.id === transferId)
+      if (index > -1) {
+        transfers.value.splice(index, 1)
+        saveTransfers()
+        console.log('✅ 资金转换记录已删除:', transferId)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('删除资金转换记录失败:', error)
+      throw error
+    }
+  }
+
+  const clearAllTransfers = () => {
+    transfers.value = []
+    localStorage.removeItem('fundTransfers')
+    console.log('✅ 所有资金转换记录已清除')
+  }
+
+  // 初始化
+  loadTransfers()
+
+  // 兼容别名：保持旧组件 executeTransfer(...) 可用
+  const executeTransfer = (transferData) => {
+    return performTransfer(transferData)
+  }
+
+  return {
+    // 状态
+    transfers,
+    loading,
+    
+    // 计算属性
+    transferHistory,
+    totalTransferAmount,
+    
+    // 方法
+    loadTransfers,
+    saveTransfers,
+    addTransfer,
+    performTransfer,
+    executeTransfer,
+    getTransfersByAsset,
+    deleteTransfer,
+    clearAllTransfers
   }
 })

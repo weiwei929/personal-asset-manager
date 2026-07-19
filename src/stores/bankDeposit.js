@@ -42,6 +42,7 @@ export const useBankDepositStore = defineStore('bankDeposit', {
       const deposit = BankDeposit.create(productName, maturityDate, amount, interestRate, term, maturityInterest, notes)
       this.deposits.push(deposit)
       this.saveToLocalStorage()
+      return deposit.id // 返回存款ID
     },
 
     // 更新存款

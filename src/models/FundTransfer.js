@@ -1,81 +1,48 @@
 /**
- * 资金转换记录模型
- * 用于追踪不同资产类型之间的资金流转
+ * 资金转换数据模型
+ * 用于记录不同资产类型之间的资金流转
  */
-
 class FundTransfer {
-  constructor(data = {}) {
-    this.id = data.id || this.generateId()
-    this.fromType = data.fromType || '' // 'net-income' | 'bank-deposit' | 'stock' | 'lent-money'
-    this.toType = data.toType || ''     // 'bank-deposit' | 'stock' | 'lent-money'
-    this.amount = data.amount || 0
-    this.date = data.date ? new Date(data.date) : new Date()
-    this.month = data.month || this.formatMonth(this.date)
-    this.year = data.year || this.date.getFullYear()
-    this.description = data.description || ''
-    this.status = data.status || 'completed' // 'completed' | 'cancelled'
-    this.relatedRecordId = data.relatedRecordId || null // 关联的具体记录ID
+  constructor({
+    id = null,
+    fromType,
+    toType,
+    amount,
+    description,
+    transferType = 'manual',
+    relatedRecordId = null,
+    date = new Date().toISOString(),
+    createdAt = null
+  }) {
+    // 反序列化时保留原 id，避免刷新后历史记录 ID 全变
+    this.id = id || (Date.now().toString() + Math.random().toString(36).substr(2, 9))
+    this.fromType = fromType // cash_pool, bank_deposit, stock_investment, lent_money
+    this.toType = toType
+    this.amount = parseFloat(amount) || 0
+    this.description = description || ''
+    this.transferType = transferType // manual, maturity, sell, return, reverse
+    this.relatedRecordId = relatedRecordId // 关联的资产记录ID
+    this.date = date
+    this.createdAt = createdAt || new Date().toISOString()
   }
 
   /**
-   * 生成唯一ID
-   */
-  generateId() {
-    return 'transfer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-  }
-
-  /**
-   * 格式化月份为 YYYY-MM 格式
-   */
-  formatMonth(date) {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    return `${year}-${month}`
-  }
-
-  /**
-   * 获取转换类型的显示名称
-   */
-  static getTypeDisplayName(type) {
-    const typeNames = {
-      'net-income': '月度净收入',
-      'bank-deposit': '银行存款',
-      'stock': '股票投资',
-      'lent-money': '借出资金'
-    }
-    return typeNames[type] || type
-  }
-
-  /**
-   * 获取转换的显示描述
-   */
-  getDisplayDescription() {
-    const fromName = FundTransfer.getTypeDisplayName(this.fromType)
-    const toName = FundTransfer.getTypeDisplayName(this.toType)
-    return `从 ${fromName} 转入 ${toName}`
-  }
-
-  /**
-   * 验证转换数据的有效性
+   * 验证数据完整性
    */
   validate() {
     const errors = []
     
-    if (!this.fromType) {
-      errors.push('来源资金类型不能为空')
-    }
+    if (!this.fromType) errors.push('转出类型不能为空')
+    if (!this.toType) errors.push('转入类型不能为空')
+    if (this.amount <= 0) errors.push('转换金额必须大于0')
+    if (!this.description) errors.push('转换描述不能为空')
     
-    if (!this.toType) {
-      errors.push('目标资金类型不能为空')
-    }
+    const validTypes = ['cash_pool', 'bank_deposit', 'stock_investment', 'lent_money']
+    if (!validTypes.includes(this.fromType)) errors.push('无效的转出类型')
+    if (!validTypes.includes(this.toType)) errors.push('无效的转入类型')
     
-    if (this.fromType === this.toType) {
-      errors.push('来源和目标资金类型不能相同')
-    }
-    
-    if (!this.amount || this.amount <= 0) {
-      errors.push('转换金额必须大于0')
-    }
+    const validTransferTypes = ['manual', 'maturity', 'sell', 'return', 'reverse']
+    if (!validTransferTypes.includes(this.transferType)) errors.push('无效的转换类型')
     
     return {
       isValid: errors.length === 0,
@@ -84,7 +51,34 @@ class FundTransfer {
   }
 
   /**
-   * 转换为存储格式
+   * 获取转换类型的中文描述
+   */
+  getTransferTypeLabel() {
+    const labels = {
+      manual: '手动转换',
+      maturity: '到期变现',
+      sell: '卖出变现',
+      return: '借款收回',
+      reverse: '撤销操作'
+    }
+    return labels[this.transferType] || '未知类型'
+  }
+
+  /**
+   * 获取资产类型的中文描述
+   */
+  getAssetTypeLabel(type) {
+    const labels = {
+      cash_pool: '资金池',
+      bank_deposit: '银行存款',
+      stock_investment: '股票投资',
+      lent_money: '借出资金'
+    }
+    return labels[type] || '未知类型'
+  }
+
+  /**
+   * 序列化为JSON
    */
   toJSON() {
     return {
@@ -92,12 +86,11 @@ class FundTransfer {
       fromType: this.fromType,
       toType: this.toType,
       amount: this.amount,
-      date: this.date.toISOString(),
-      month: this.month,
-      year: this.year,
       description: this.description,
-      status: this.status,
-      relatedRecordId: this.relatedRecordId
+      transferType: this.transferType,
+      relatedRecordId: this.relatedRecordId,
+      date: this.date,
+      createdAt: this.createdAt
     }
   }
 
@@ -106,6 +99,34 @@ class FundTransfer {
    */
   static fromJSON(data) {
     return new FundTransfer(data)
+  }
+
+  /**
+   * 创建资金分配转换记录
+   */
+  static createAllocation(toType, amount, description, relatedRecordId) {
+    return new FundTransfer({
+      fromType: 'cash_pool',
+      toType,
+      amount,
+      description,
+      transferType: 'manual',
+      relatedRecordId
+    })
+  }
+
+  /**
+   * 创建资金回收转换记录
+   */
+  static createDeallocation(fromType, amount, description, transferType = 'manual', relatedRecordId) {
+    return new FundTransfer({
+      fromType,
+      toType: 'cash_pool',
+      amount,
+      description,
+      transferType,
+      relatedRecordId
+    })
   }
 }
 

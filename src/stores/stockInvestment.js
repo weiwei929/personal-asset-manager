@@ -27,16 +27,16 @@ export const useStockInvestmentStore = defineStore('stockInvestment', {
       return [...state.stocks].sort((a, b) => b.currentValue - a.currentValue)
     },
 
-    // 市值占比
+    // 市值占比（不可通过 state.getters 访问其它 getter）
     stockValueDistribution: (state) => {
-      const total = state.getters.totalMarketValue;
-      if (total === 0) return [];
+      const total = state.stocks.reduce((sum, stock) => sum + (Number(stock.currentValue) || 0), 0)
+      if (total === 0) return []
 
       return state.stocks.map(stock => ({
         name: stock.name,
         value: stock.currentValue,
         percentage: ((stock.currentValue / total) * 100).toFixed(1)
-      })).sort((a, b) => b.value - a.value);
+      })).sort((a, b) => b.value - a.value)
     }
   },
 
@@ -46,6 +46,7 @@ export const useStockInvestmentStore = defineStore('stockInvestment', {
       const stock = StockInvestment.create(name, currentValue, accountBalance, shares);
       this.stocks.push(stock);
       this.saveToLocalStorage();
+      return stock.id;
     },
 
     // 更新股票投资

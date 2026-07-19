@@ -380,20 +380,49 @@
               />
             </div>
 
+            <div v-if="!isEditing">
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
+                资金来源 <span class="text-red-500">*</span>
+              </label>
+              <div class="space-y-2">
+                <label class="flex items-center">
+                  <input
+                    v-model="depositForm.fundSource"
+                    type="radio"
+                    value="cash_pool"
+                    class="mr-2"
+                  />
+                  <span>资金池 (可用余额: ¥{{ formatAmount(availableCash) }})</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    v-model="depositForm.fundSource"
+                    type="radio"
+                    value="external"
+                    class="mr-2"
+                  />
+                  <span>外部资金</span>
+                </label>
+              </div>
+            </div>
+
             <div>
               <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
                 存款金额 <span class="text-red-500">*</span>
               </label>
               <input
-                v-model="depositForm.amount"
+                v-model.number="depositForm.amount"
                 type="number"
                 step="0.01"
-                min="0.01"
-                max="99999999.99"
+                :min="0"
+                :max="depositForm.fundSource === 'cash_pool' ? availableCash : undefined"
                 placeholder="请输入存款金额"
                 class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 required
               />
+              <div v-if="depositForm.fundSource === 'cash_pool'" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                最大可用: ¥{{ formatAmount(availableCash) }}
+              </div>
             </div>
 
             <div>
@@ -477,11 +506,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBankDepositStore } from '../stores/bankDeposit.js'
+import { useFundTransferStore } from '../stores/fundTransfer.js'
+import { useFinanceStore } from '../stores/finance.js'
 
 export default {
   name: 'BankDepositList',
   setup() {
     const bankDepositStore = useBankDepositStore()
+    const fundTransferStore = useFundTransferStore()
+    const financeStore = useFinanceStore()
+    
     const showImportDialog = ref(false)
     const showAddDialog = ref(false)
     const isEditing = ref(false)
@@ -498,7 +532,8 @@ export default {
       interestRate: null,
       term: '',
       maturityInterest: null,
-      notes: ''
+      notes: '',
+      fundSource: 'cash_pool'
     })
 
     // 计算属性
@@ -508,9 +543,83 @@ export default {
     const totalExpectedInterest = computed(() => bankDepositStore.totalExpectedInterest)
     const maturingDeposits = computed(() => bankDepositStore.maturingDeposits)
     const maturedDeposits = computed(() => bankDepositStore.maturedDeposits)
+    const availableCash = computed(() => financeStore.cashPool)
+
+    // 工具函数
+    const formatAmount = (amount) => {
+      if (typeof amount !== 'number') return '0'
+      return amount.toLocaleString('zh-CN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })
+    }
 
     const formatDate = (dateString) => {
       return dateString
+    }
+
+    // 变现相关的响应式数据和方法
+    const showMaturityDialogFlag = ref(false)
+    const selectedDeposit = ref(null)
+    const maturityForm = ref({
+      actualInterest: 0,
+      maturityDate: new Date().toISOString().split('T')[0],
+      notes: ''
+    })
+
+    // 计算变现总额
+    const totalMaturityAmount = computed(() => {
+      if (!selectedDeposit.value) return 0
+      return (selectedDeposit.value.amount || 0) + (maturityForm.value.actualInterest || 0)
+    })
+
+    const showMaturityDialog = (deposit) => {
+      selectedDeposit.value = deposit
+      maturityForm.value = {
+        actualInterest: deposit.maturityInterest || 0,
+        maturityDate: new Date().toISOString().split('T')[0],
+        notes: ''
+      }
+      showMaturityDialogFlag.value = true
+    }
+
+    const closeMaturityDialog = () => {
+      showMaturityDialogFlag.value = false
+      selectedDeposit.value = null
+      maturityForm.value = {
+        actualInterest: 0,
+        maturityDate: new Date().toISOString().split('T')[0],
+        notes: ''
+      }
+    }
+
+    // 处理存款变现
+    const processMaturity = async () => {
+      try {
+        if (!selectedDeposit.value) return
+
+        const totalAmount = totalMaturityAmount.value
+        const deposit = selectedDeposit.value
+
+        // 执行资金转换（资产转回资金池）
+        await fundTransferStore.performTransfer({
+          fromType: 'bank_deposit',
+          toType: 'cash_pool',
+          amount: totalAmount,
+          description: `银行存款变现: ${deposit.productName} (本金¥${deposit.amount.toLocaleString()} + 利息¥${maturityForm.value.actualInterest.toLocaleString()})`,
+          relatedRecordId: deposit.id,
+          transferType: 'maturity'
+        })
+
+        // 删除存款记录（因为已经变现）
+        bankDepositStore.removeDeposit(deposit.id)
+
+        ElMessage.success(`存款变现成功，¥${totalAmount.toLocaleString()} 已转入资金池`)
+        closeMaturityDialog()
+      } catch (error) {
+        console.error('变现失败:', error)
+        ElMessage.error('变现失败，请重试')
+      }
     }
 
     const handleFileChange = (file) => {
@@ -571,12 +680,21 @@ export default {
         return
       }
 
+      // 验证资金池余额
+      if (!isEditing.value && depositForm.value.fundSource === 'cash_pool') {
+        if (depositForm.value.amount > availableCash.value) {
+          ElMessage.error('存款金额超过资金池可用余额')
+          return
+        }
+      }
+
       try {
         if (isEditing.value) {
           bankDepositStore.updateDeposit(depositForm.value.id, depositForm.value)
           ElMessage.success('存款信息更新成功')
         } else {
-          bankDepositStore.addDeposit(
+          // 创建存款记录
+          const depositId = bankDepositStore.addDeposit(
             depositForm.value.productName,
             depositForm.value.maturityDate,
             depositForm.value.amount,
@@ -585,6 +703,26 @@ export default {
             depositForm.value.maturityInterest || 0,
             depositForm.value.notes
           )
+
+          // 如果使用资金池，执行资金转换
+          if (depositForm.value.fundSource === 'cash_pool') {
+            const result = await fundTransferStore.performTransfer({
+              fromType: 'cash_pool',
+              toType: 'bank_deposit',
+              amount: depositForm.value.amount,
+              description: `新增银行存款: ${depositForm.value.productName}`,
+              relatedRecordId: depositId,
+              transferType: 'manual'
+            })
+            
+            if (!result.success) {
+              // 如果转换失败，删除刚创建的存款记录
+              bankDepositStore.removeDeposit(depositId)
+              ElMessage.error(result.message || '资金转换失败')
+              return
+            }
+          }
+
           ElMessage.success('存款添加成功')
         }
 
@@ -677,7 +815,8 @@ export default {
         interestRate: null,
         term: '',
         maturityInterest: null,
-        notes: ''
+        notes: '',
+        fundSource: 'cash_pool'
       }
       isEditing.value = false
     }
@@ -693,6 +832,7 @@ export default {
       totalExpectedInterest,
       maturingDeposits,
       maturedDeposits,
+      availableCash,
       showImportDialog,
       showAddDialog,
       isEditing,
@@ -701,6 +841,7 @@ export default {
       selectedFile,
       uploadRef,
       depositForm,
+      formatAmount,
       formatDate,
       handleFileChange,
       importCSV,
@@ -709,7 +850,14 @@ export default {
       deleteDeposit,
       exportData,
       clearAllDeposits,
-      resetForm
+      resetForm,
+      showMaturityDialogFlag,
+      selectedDeposit,
+      maturityForm,
+      totalMaturityAmount,
+      showMaturityDialog,
+      closeMaturityDialog,
+      processMaturity
     }
   }
 }
