@@ -1,196 +1,76 @@
 <template>
-  <div class="p-6 space-y-6">
-    <!-- 页面头部 -->
-    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">银行存款列表</h1>
-        <div class="flex flex-wrap gap-2">
-          <button 
-            @click="showImportDialog = true"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
-          >
-            导入CSV
-          </button>
-          <button 
-            @click="showAddDialog = true"
-            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm"
-          >
-            新增存款
-          </button>
-          <button 
-            v-if="deposits.length > 0"
-            @click="clearAllDeposits"
-            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
-          >
-            清空数据
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 统计信息 -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center">
-              <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">总存款金额</p>
-            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">¥{{ totalDepositAmount.toLocaleString() }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <div class="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-lg flex items-center justify-center">
-              <svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">预期利息收益</p>
-            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">¥{{ totalExpectedInterest.toLocaleString() }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <div class="w-8 h-8 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg flex items-center justify-center">
-              <svg class="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">即将到期</p>
-            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">{{ maturingDeposits.length }} 笔</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <div class="w-8 h-8 bg-red-100 dark:bg-red-900/50 rounded-lg flex items-center justify-center">
-              <svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">已到期</p>
-            <p class="text-2xl font-semibold text-text-light dark:text-text-dark">{{ maturedDeposits.length }} 笔</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 到期提醒 -->
-    <div v-if="maturingDeposits.length > 0" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-          </svg>
-        </div>
-        <div class="ml-3">
-          <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200">到期提醒</h3>
-          <p class="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-            有 {{ maturingDeposits.length }} 笔存款将在30天内到期，请及时处理
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- 操作面板 -->
-    <div v-if="deposits.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <button 
-        @click="showAddDialog = true"
-        class="flex items-center justify-center gap-2 px-6 py-4 bg-primary hover:bg-primary-dark text-white rounded-xl transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-        </svg>
-        新增存款
-      </button>
-      
-      <button 
-        @click="showImportDialog = true"
-        class="flex items-center justify-center gap-2 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-        </svg>
-        导入CSV
-      </button>
-      
-      <button 
-        @click="exportData"
-        class="flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-        </svg>
-        导出数据
-      </button>
-      
-      <button 
-        @click="clearAllDeposits"
-        class="flex items-center justify-center gap-2 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-        </svg>
-        清空数据
-      </button>
-    </div>
-
-    <!-- 存款列表 -->
-    <div v-if="deposits.length === 0" class="unified-empty-state">
-      <div class="empty-icon">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-        </svg>
-      </div>
-      <h3 class="empty-title">暂无存款数据</h3>
-      <p class="empty-description">开始添加您的第一笔银行存款记录</p>
-      <button class="empty-action" @click="showAddDialog = true">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <div class="page-stack">
+    <div class="page-toolbar">
+      <button type="button" class="btn-line" @click="showImportDialog = true">导入 CSV</button>
+      <button type="button" class="btn-line" v-if="deposits.length > 0" @click="exportData">导出</button>
+      <button type="button" class="btn-line-primary" @click="showAddDialog = true">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
         </svg>
-        添加第一笔存款
+        新增
+      </button>
+      <button
+        v-if="deposits.length > 0"
+        type="button"
+        class="btn-line-muted"
+        @click="clearAllDeposits"
+      >
+        清空
       </button>
     </div>
 
-    <div v-else class="bg-card-light dark:bg-card-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark overflow-hidden">
-      <div class="px-4 py-3 border-b border-border-light dark:border-border-dark">
-        <h3 class="text-lg font-semibold text-text-light dark:text-text-dark">存款记录</h3>
+    <div class="stat-strip">
+      <div class="stat-cell">
+        <p class="stat-cell-label">存款合计</p>
+        <p class="stat-cell-value">¥{{ totalDepositAmount.toLocaleString() }}</p>
       </div>
-      
+      <div class="stat-cell">
+        <p class="stat-cell-label">预期利息</p>
+        <p class="stat-cell-value">¥{{ totalExpectedInterest.toLocaleString() }}</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell-label">即将到期</p>
+        <p class="stat-cell-value">{{ maturingDeposits.length }} 笔</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell-label">已到期</p>
+        <p class="stat-cell-value">{{ maturedDeposits.length }} 笔</p>
+      </div>
+    </div>
+
+    <p
+      v-if="maturingDeposits.length > 0"
+      class="text-xs text-subtext-light dark:text-subtext-dark -mt-2"
+    >
+      有 {{ maturingDeposits.length }} 笔将在 30 天内到期
+    </p>
+
+    <div v-if="deposits.length === 0" class="panel">
+      <div class="empty-panel">
+        <svg class="w-10 h-10 text-subtext-light dark:text-subtext-dark opacity-40" fill="none" stroke="currentColor" stroke-width="1.25" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11"/>
+        </svg>
+        <p class="empty-panel-title">暂无存款记录</p>
+        <p class="empty-panel-desc">可为定期、活期或临时存款；来源可选资金池或外部</p>
+        <button type="button" class="btn-line mt-5" @click="showAddDialog = true">添加第一笔</button>
+      </div>
+    </div>
+
+    <div v-else class="panel">
       <!-- 桌面端表格 -->
       <div class="overflow-x-auto hidden md:block">
-        <table class="w-full">
-          <thead class="bg-gray-50 dark:bg-gray-800">
+        <table class="data-table">
+          <thead>
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">产品名称</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">到期时间</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">存款金额</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">利率</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">存期</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">到期利息</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">到期状态</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">备注</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
+              <th>产品</th>
+              <th>到期</th>
+              <th>本金</th>
+              <th>利率</th>
+              <th>存期</th>
+              <th>到期利息</th>
+              <th>状态</th>
+              <th>备注</th>
+              <th class="text-right">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border-light dark:divide-border-dark">

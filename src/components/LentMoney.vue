@@ -1,191 +1,75 @@
 <template>
-  <div class="lent-money">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-content">
-        <h2 class="header-title">借出资金管理</h2>
-      <div class="header-actions">
-        <button class="btn btn-success" @click="showAddDialog = true">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          新增借出
-        </button>
-        <button class="btn btn-danger" @click="clearAllRecords" v-if="lentRecords.length > 0">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-          </svg>
-          清空数据
-        </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 统计信息 -->
-    <div class="stats-section">
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon total-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 1v6m0 6v6"/>
-                <path d="m21 12-6-3-6 3-6-3"/>
-              </svg>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">¥{{ totalLentAmount.toLocaleString() }}</div>
-              <div class="stat-label">总借出金额</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon pending-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12,6 12,12 16,14"/>
-              </svg>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">¥{{ pendingAmount.toLocaleString() }}</div>
-              <div class="stat-label">待还款金额</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon returned-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20,6 9,17 4,12"/>
-              </svg>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">¥{{ returnedAmount.toLocaleString() }}</div>
-              <div class="stat-label">已还款金额</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon maturing-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="m21 16-4 4-4-4"/>
-                <path d="M17 20V4"/>
-                <path d="m3 8 4-4 4 4"/>
-                <path d="M7 4v16"/>
-              </svg>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ maturingRecords.length }}</div>
-              <div class="stat-label">即将到期</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon overdue-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="15" y1="9" x2="9" y2="15"/>
-                <line x1="9" y1="9" x2="15" y2="15"/>
-              </svg>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ overdueRecords.length }}</div>
-              <div class="stat-label">逾期未还</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon count-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="8" y1="6" x2="21" y2="6"/>
-                <line x1="8" y1="12" x2="21" y2="12"/>
-                <line x1="8" y1="18" x2="21" y2="18"/>
-                <line x1="3" y1="6" x2="3.01" y2="6"/>
-                <line x1="3" y1="12" x2="3.01" y2="12"/>
-                <line x1="3" y1="18" x2="3.01" y2="18"/>
-              </svg>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ lentRecords.length }}</div>
-              <div class="stat-label">总记录数</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 到期提醒 -->
-    <div v-if="maturingRecords.length > 0 || overdueRecords.length > 0">
-      <div v-if="maturingRecords.length > 0" class="alert">
-        <div class="alert-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="m21 16-4 4-4-4"/>
-            <path d="M17 20V4"/>
-            <path d="m3 8 4-4 4 4"/>
-            <path d="M7 4v16"/>
-          </svg>
-        </div>
-        <div class="alert-content">
-          <div class="alert-title">即将到期提醒</div>
-          <div class="alert-message">有 {{ maturingRecords.length }} 笔借出资金将在30天内到期，请及时跟进</div>
-        </div>
-      </div>
-
-      <div v-if="overdueRecords.length > 0" class="alert" style="background: #fee2e2; border-color: #ef4444;">
-        <div class="alert-icon" style="color: #ef4444;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="15" y1="9" x2="9" y2="15"/>
-            <line x1="9" y1="9" x2="15" y2="15"/>
-          </svg>
-        </div>
-        <div class="alert-content">
-          <div class="alert-title" style="color: #dc2626;">逾期提醒</div>
-          <div class="alert-message" style="color: #dc2626;">有 {{ overdueRecords.length }} 笔借出资金已逾期，请立即跟进</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 借出资金列表 -->
-    <div v-if="lentRecords.length === 0" class="unified-empty-state">
-      <div class="empty-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M12 1v6m0 6v6"/>
-          <path d="m21 12-6-3-6 3-6-3"/>
+  <div class="page-stack lent-money">
+    <div class="page-toolbar">
+      <button type="button" class="btn-line-primary" @click="showAddDialog = true">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
         </svg>
-      </div>
-      <h3 class="empty-title">暂无借出资金记录</h3>
-      <p class="empty-description">开始添加您的第一笔借出记录</p>
-      <button class="empty-action" @click="showAddDialog = true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-        添加第一笔借出记录
+        新增
+      </button>
+      <button
+        v-if="lentRecords.length > 0"
+        type="button"
+        class="btn-line-muted"
+        @click="clearAllRecords"
+      >
+        清空
       </button>
     </div>
 
-    <div v-else class="table-container">
-        <table class="custom-table">
+    <div class="stat-strip">
+      <div class="stat-cell">
+        <p class="stat-cell-label">借出合计</p>
+        <p class="stat-cell-value">¥{{ totalLentAmount.toLocaleString() }}</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell-label">待还</p>
+        <p class="stat-cell-value">¥{{ pendingAmount.toLocaleString() }}</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell-label">已还</p>
+        <p class="stat-cell-value">¥{{ returnedAmount.toLocaleString() }}</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell-label">即将到期 / 逾期</p>
+        <p class="stat-cell-value">{{ maturingRecords.length }} / {{ overdueRecords.length }}</p>
+      </div>
+    </div>
+
+    <p
+      v-if="maturingRecords.length > 0 || overdueRecords.length > 0"
+      class="text-xs text-subtext-light dark:text-subtext-dark -mt-2"
+    >
+      <span v-if="overdueRecords.length">逾期 {{ overdueRecords.length }} 笔</span>
+      <span v-if="overdueRecords.length && maturingRecords.length"> · </span>
+      <span v-if="maturingRecords.length">30 天内到期 {{ maturingRecords.length }} 笔</span>
+    </p>
+
+    <div v-if="lentRecords.length === 0" class="panel">
+      <div class="empty-panel">
+        <svg class="w-10 h-10 text-subtext-light dark:text-subtext-dark opacity-40" fill="none" stroke="currentColor" stroke-width="1.25" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16 11V6a2 2 0 00-4 0"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 11V4a2 2 0 00-4 0v7"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 11.5V8a2 2 0 00-4 0v6a6 6 0 006 6h2"/>
+        </svg>
+        <p class="empty-panel-title">暂无借出记录</p>
+        <p class="empty-panel-desc">记录借给他人的款项与预计归还时间</p>
+        <button type="button" class="btn-line mt-5" @click="showAddDialog = true">添加第一笔</button>
+      </div>
+    </div>
+
+    <div v-else class="panel overflow-x-auto">
+        <table class="data-table">
           <thead>
             <tr>
               <th>借出人</th>
               <th>金额</th>
-              <th>借出日期</th>
-              <th>预计还款时间</th>
-              <th>实际还款时间</th>
+              <th>借出日</th>
+              <th>预计归还</th>
+              <th>实际归还</th>
               <th>状态</th>
               <th>备注</th>
-              <th>操作</th>
+              <th class="text-right">操作</th>
             </tr>
           </thead>
           <tbody>

@@ -1,183 +1,102 @@
 <template>
-  <div class="monthly-finance">
-    <!-- 当前月份显示 -->
-    <div class="mb-6">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-        {{ MonthlyFinance.formatMonth(selectedMonth) }}收支管理
-      </h2>
-      <p class="text-gray-600 dark:text-gray-400 mt-1">
-        管理您的月度收入和支出数据，构建资金池
+  <div class="page-stack monthly-finance">
+    <div>
+      <p class="text-sm text-subtext-light dark:text-subtext-dark">
+        {{ MonthlyFinance.formatMonth(selectedMonth) }} · 按月流量，净额进入资金池
       </p>
     </div>
-    
-    <!-- 资金池提示 -->
-    <div v-if="monthlyFinance" class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm text-blue-700 dark:text-blue-300">
-            💡 本月净收入将自动加入资金池
-          </p>
-          <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">
-            净收入 = 收入 - 支出 = ¥{{ formatAmount(monthlyFinance.netIncome) }}
-          </p>
-        </div>
-        <div class="text-right">
-          <p class="text-sm font-semibold text-blue-700 dark:text-blue-300">
-            当前资金池
-          </p>
-          <p class="text-lg font-bold text-blue-600">
-            ¥{{ formatAmount(financeStore.cashPool) }}
-          </p>
-        </div>
+
+    <div class="stat-strip" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+      <div class="stat-cell">
+        <p class="stat-cell-label">收入</p>
+        <p class="stat-cell-value">¥{{ formatAmount(currentMonthFinance.income) }}</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell-label">支出</p>
+        <p class="stat-cell-value">¥{{ formatAmount(currentMonthFinance.expense) }}</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-cell-label">净收入</p>
+        <p
+          class="stat-cell-value"
+          :class="(currentMonthFinance.netIncome || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'"
+        >
+          ¥{{ formatAmount(currentMonthFinance.netIncome) }}
+        </p>
       </div>
     </div>
 
-    <!-- 月度统计卡片 -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-      <!-- 当月收入 -->
-      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="ml-4 flex-1">
-            <p class="text-sm font-medium text-subtext-light dark:text-subtext-dark">当月收入</p>
-            <p class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">¥{{ currentMonthFinance.income.toLocaleString() }}</p>
-          </div>
-        </div>
-      </div>
+    <p class="text-xs text-subtext-light dark:text-subtext-dark -mt-2">
+      资金池 ¥{{ formatAmount(financeStore.cashPool) }}
+      <span v-if="monthlyFinance"> · 本月净额 ¥{{ formatAmount(monthlyFinance.netIncome) }}</span>
+    </p>
 
-      <!-- 当月支出 -->
-      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="ml-4 flex-1">
-            <p class="text-sm font-medium text-subtext-light dark:text-subtext-dark">当月支出</p>
-            <p class="text-xl sm:text-2xl font-bold text-text-light dark:text-text-dark">¥{{ currentMonthFinance.expense.toLocaleString() }}</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- 月净收入 -->
-      <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-              </svg>
-            </div>
-          </div>
-          <div class="ml-4 flex-1">
-            <p class="text-sm font-medium text-subtext-light dark:text-subtext-dark">月净收入</p>
-            <p class="text-xl sm:text-2xl font-bold" :class="currentMonthFinance.netIncome >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
-              ¥{{ currentMonthFinance.netIncome.toLocaleString() }}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 累积净收入显示 -->
-    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+    <!-- 累积净收入显示（保留后续结构，样式弱化） -->
+    <div class="rounded-xl border border-border-light dark:border-border-dark p-4">
       <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-        </div>
-        <div class="ml-3">
-          <p class="text-sm font-medium text-blue-800 dark:text-blue-200">
+        <div class="ml-0">
+          <p class="text-sm font-medium text-text-light dark:text-text-dark">
             累积净收入: ¥{{ totalCumulativeNet.toLocaleString() }}
           </p>
         </div>
       </div>
     </div>
 
-    <!-- 收入支出录入表单 -->
-    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-      <h3 class="text-lg font-semibold text-text-light dark:text-text-dark mb-6">
-        录入{{ MonthlyFinance.formatMonth(selectedMonth) }}收支
+    <div class="panel p-5">
+      <h3 class="text-sm font-medium text-text-light dark:text-text-dark mb-4">
+        录入本月
       </h3>
 
-      <form @submit.prevent="saveMonthlyFinance" class="space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form @submit.prevent="saveMonthlyFinance" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-              当月收入
-            </label>
+            <label class="block text-xs text-subtext-light dark:text-subtext-dark mb-1.5">收入</label>
             <input
               v-model.number="financeForm.income"
               type="number"
               step="0.01"
               min="0"
               max="99999999.99"
-              placeholder="请输入当月总收入"
-              class="w-full px-3 py-2 bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              placeholder="0.00"
+              class="w-full px-3 py-2 bg-transparent border border-border-light dark:border-border-dark rounded-lg text-sm text-text-light dark:text-text-dark focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
-
           <div>
-            <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-              当月支出
-            </label>
+            <label class="block text-xs text-subtext-light dark:text-subtext-dark mb-1.5">支出</label>
             <input
               v-model.number="financeForm.expense"
               type="number"
               step="0.01"
               min="0"
               max="99999999.99"
-              placeholder="请输入当月总支出"
-              class="w-full px-3 py-2 bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg text-text-light dark:text-text-dark focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              placeholder="0.00"
+              class="w-full px-3 py-2 bg-transparent border border-border-light dark:border-border-dark rounded-lg text-sm text-text-light dark:text-text-dark focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
         </div>
 
-        <div class="flex flex-col sm:flex-row gap-3">
-          <button
-            type="submit"
-            :disabled="saving"
-            class="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {{ saving ? '保存中...' : '保存月度收支' }}
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" :disabled="saving" class="btn-line-primary disabled:opacity-50">
+            {{ saving ? '保存中…' : '保存' }}
           </button>
-          <button
-            type="button"
-            @click="resetForm"
-            class="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors"
-          >
-            重置
-          </button>
+          <button type="button" class="btn-line" @click="resetForm">清空表单</button>
         </div>
       </form>
     </div>
 
-    <!-- 月度历史记录 -->
-    <div class="bg-card-light dark:bg-card-dark rounded-xl p-4 sm:p-6 shadow-sm border border-border-light dark:border-border-dark">
-      <h3 class="text-lg font-semibold text-text-light dark:text-text-dark mb-6">
-        月度收支历史
-      </h3>
+    <div class="panel p-5">
+      <h3 class="text-sm font-medium text-text-light dark:text-text-dark mb-4">历史</h3>
 
       <div class="overflow-x-auto">
-        <table class="w-full">
+        <table class="data-table">
           <thead>
-            <tr class="border-b border-border-light dark:border-border-dark">
-              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">月份</th>
-              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">收入</th>
-              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">支出</th>
-              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">净收入</th>
-              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">累积净收入</th>
-              <th class="text-left py-3 px-4 text-sm font-medium text-text-light dark:text-text-dark">操作</th>
+            <tr>
+              <th>月份</th>
+              <th>收入</th>
+              <th>支出</th>
+              <th>净收入</th>
+              <th>累积</th>
+              <th class="text-right">操作</th>
             </tr>
           </thead>
           <tbody>

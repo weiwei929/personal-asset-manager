@@ -32,6 +32,96 @@
   .sidebar-nav-item:not(.active) {
     @apply text-subtext-light dark:text-subtext-dark hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-text-light dark:hover:text-text-dark;
   }
+
+  /* 内页通用 */
+  .page-stack {
+    @apply space-y-6;
+  }
+
+  .page-toolbar {
+    @apply flex flex-wrap items-center justify-end gap-2;
+  }
+
+  .btn-line {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium
+      border border-border-light dark:border-border-dark
+      text-text-light dark:text-text-dark
+      bg-card-light dark:bg-card-dark
+      hover:bg-gray-50 dark:hover:bg-gray-800/80 transition-colors;
+  }
+
+  .btn-line-primary {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium
+      border border-transparent
+      text-white bg-primary hover:opacity-90 transition-opacity;
+  }
+
+  .btn-line-muted {
+    @apply inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
+      text-subtext-light dark:text-subtext-dark
+      hover:text-red-600 dark:hover:text-red-400
+      hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors;
+  }
+
+  .stat-strip {
+    @apply grid grid-cols-2 lg:grid-cols-4 gap-3;
+  }
+
+  .stat-cell {
+    @apply rounded-xl border border-border-light dark:border-border-dark
+      bg-card-light dark:bg-card-dark p-4;
+  }
+
+  .stat-cell-label {
+    @apply text-xs text-subtext-light dark:text-subtext-dark mb-1;
+  }
+
+  .stat-cell-value {
+    @apply text-lg font-semibold text-text-light dark:text-text-dark tabular-nums tracking-tight;
+  }
+
+  .panel {
+    @apply rounded-xl border border-border-light dark:border-border-dark
+      bg-card-light dark:bg-card-dark overflow-hidden;
+  }
+
+  .empty-panel {
+    @apply flex flex-col items-center justify-center text-center px-6 py-14;
+  }
+
+  .empty-panel-title {
+    @apply text-sm font-medium text-text-light dark:text-text-dark mt-3;
+  }
+
+  .empty-panel-desc {
+    @apply text-xs text-subtext-light dark:text-subtext-dark mt-1 max-w-xs;
+  }
+
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table th {
+    @apply px-4 py-2.5 text-left text-xs font-medium text-subtext-light dark:text-subtext-dark
+      border-b border-border-light dark:border-border-dark bg-transparent;
+  }
+
+  .data-table td {
+    @apply px-4 py-3 text-text-light dark:text-text-dark
+      border-b border-border-light/70 dark:border-border-dark/70 tabular-nums;
+  }
+
+  .data-table tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .link-action {
+    @apply text-xs text-subtext-light dark:text-subtext-dark hover:text-primary transition-colors;
+  }
+
+  .link-danger {
+    @apply text-xs text-subtext-light dark:text-subtext-dark hover:text-red-500 transition-colors;
+  }
 }
 
 /* 主题 CSS 变量（供 Element Plus 与遗留组件） */

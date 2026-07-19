@@ -104,8 +104,8 @@
         </aside>
 
         <main class="flex-1 overflow-y-auto">
-          <div class="max-w-3xl mx-auto px-5 sm:px-8 py-6 sm:py-8">
-            <header class="hidden md:block mb-8">
+          <div class="max-w-4xl mx-auto px-5 sm:px-8 py-6 sm:py-8">
+            <header class="hidden md:flex items-baseline justify-between gap-4 mb-6">
               <h1 class="text-lg font-semibold tracking-tight">{{ getCurrentPageTitle() }}</h1>
             </header>
             <Dashboard v-if="activeMenu === 'dashboard'" @openDialog="handleOpenDialog" />
