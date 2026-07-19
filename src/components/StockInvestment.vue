@@ -100,28 +100,56 @@
 
           <form @submit.prevent="saveStock" class="space-y-4">
             <!-- 资金来源选择 -->
-            <div v-if="!isEditing">
-              <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                资金来源 <span class="text-red-500">*</span>
-              </label>
-              <div class="space-y-2">
-                <label class="flex items-center">
+            <div v-if="!isEditing" class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-1">
+                  资金来源 <span class="text-red-500">*</span>
+                </label>
+                <p class="text-xs text-subtext-light dark:text-subtext-dark leading-relaxed mb-3">
+                  <strong class="font-medium text-text-light dark:text-text-dark">资金池</strong>
+                  是本系统里已记账的可分配现金（各月净收入累计 − 已划出部分），不是某张银行卡。
+                </p>
+              </div>
+              <div class="space-y-2.5">
+                <label
+                  class="flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors"
+                  :class="stockForm.fundSource === 'cash_pool'
+                    ? 'border-primary/50 bg-primary/5'
+                    : 'border-border-light dark:border-border-dark'"
+                >
                   <input
                     v-model="stockForm.fundSource"
                     type="radio"
                     value="cash_pool"
-                    class="mr-2"
+                    class="mt-0.5"
                   />
-                  <span>资金池 (可用余额: ¥{{ formatAmount(availableCash) }})</span>
+                  <span class="min-w-0">
+                    <span class="block text-sm text-text-light dark:text-text-dark">从资金池买入</span>
+                    <span class="block text-xs text-subtext-light dark:text-subtext-dark mt-0.5 leading-relaxed">
+                      用账本里已有的可分配现金买入。提交后从资金池扣减（当前可用
+                      ¥{{ formatAmount(availableCash) }}），总资产不变，结构从「现金」变为「股票」。
+                    </span>
+                  </span>
                 </label>
-                <label class="flex items-center">
+                <label
+                  class="flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors"
+                  :class="stockForm.fundSource === 'external'
+                    ? 'border-primary/50 bg-primary/5'
+                    : 'border-border-light dark:border-border-dark'"
+                >
                   <input
                     v-model="stockForm.fundSource"
                     type="radio"
                     value="external"
-                    class="mr-2"
+                    class="mt-0.5"
                   />
-                  <span>外部资金</span>
+                  <span class="min-w-0">
+                    <span class="block text-sm text-text-light dark:text-text-dark">外部新资金买入</span>
+                    <span class="block text-xs text-subtext-light dark:text-subtext-dark mt-0.5 leading-relaxed">
+                      用尚未记入资金池的钱购买。不扣资金池，总资产增加。
+                      若同一笔钱已在「收支」记过收入，请勿再选外部，以免双计。
+                    </span>
+                  </span>
                 </label>
               </div>
             </div>
@@ -156,10 +184,11 @@
               />
             </div>
 
-            <!-- 账户余额 -->
+            <!-- 账户余额 / 投入金额 -->
             <div>
               <label class="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                账户余额 <span class="text-red-500">*</span>
+                {{ stockForm.fundSource === 'cash_pool' ? '从资金池划入金额' : '本次投入金额' }}
+                <span class="text-red-500">*</span>
               </label>
               <input
                 v-model.number="stockForm.accountBalance"
@@ -167,13 +196,18 @@
                 step="0.01"
                 :min="0"
                 :max="stockForm.fundSource === 'cash_pool' ? availableCash : undefined"
-                placeholder="请输入账户余额"
+                :placeholder="stockForm.fundSource === 'cash_pool' ? '将从资金池扣除的金额' : '外部投入金额'"
                 class="w-full px-3 py-2 border border-border-light dark:border-border-dark rounded-lg bg-white dark:bg-gray-800 text-text-light dark:text-text-dark focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 required
               />
-              <div v-if="stockForm.fundSource === 'cash_pool'" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                最大可用: ¥{{ formatAmount(availableCash) }}
-              </div>
+              <p class="text-xs text-subtext-light dark:text-subtext-dark mt-1 leading-relaxed">
+                <template v-if="stockForm.fundSource === 'cash_pool'">
+                  此项会从资金池扣减，上限 ¥{{ formatAmount(availableCash) }}。通常可与市值相同（刚买入时）。
+                </template>
+                <template v-else>
+                  记录外部投入；不扣资金池。市值可与投入额相同或按最新估值填写。
+                </template>
+              </p>
             </div>
 
             <div>
