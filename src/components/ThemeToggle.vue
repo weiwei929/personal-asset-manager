@@ -3,10 +3,10 @@
     <button 
       @click="toggleDropdown"
       :class="[
-        'w-10 h-10 rounded-full flex items-center justify-center transition-colors',
-        isDark 
-          ? 'bg-primary-light dark:bg-primary-dark text-white' 
-          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+        'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+        'border border-border-light dark:border-border-dark',
+        'bg-transparent text-subtext-light dark:text-subtext-dark',
+        'hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-text-light dark:hover:text-text-dark'
       ]"
       :title="currentTitle"
     >

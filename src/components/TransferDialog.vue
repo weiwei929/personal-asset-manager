@@ -19,8 +19,8 @@
 
       <div class="p-6">
         <!-- 资金池状态概览 -->
-        <div class="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 p-4 rounded-lg mb-6">
-          <h4 class="font-semibold text-gray-900 dark:text-white mb-3">💰 资金池状态</h4>
+        <div class="border border-border-light dark:border-border-dark rounded-lg p-4 mb-6 bg-gray-50 dark:bg-gray-800/40">
+          <h4 class="text-sm font-medium text-text-light dark:text-text-dark mb-3">资金池状态</h4>
           
           <div class="space-y-2">
             <div class="flex justify-between items-center">

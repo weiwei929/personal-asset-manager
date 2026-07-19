@@ -902,9 +902,10 @@ export default {
 .action-panel {
   margin-bottom: 20px;
   padding: 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: transparent;
+  border: 1px solid var(--theme-border-light, #e2e8f0);
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 .action-panel .el-button {
