@@ -1,9 +1,11 @@
 /**
  * 主题管理 Store
  * 支持亮色、暗色主题切换，并可跟随系统主题
+ * 键：STORAGE_KEYS.THEME（重置账本时保留）
  */
 
 import { defineStore } from 'pinia'
+import { STORAGE_KEYS } from '../constants/storageKeys.js'
 
 export const useThemeStore = defineStore('theme', {
   state: () => ({
@@ -200,7 +202,7 @@ export const useThemeStore = defineStore('theme', {
      * 从本地存储加载设置
      */
     loadFromStorage() {
-      const stored = localStorage.getItem('theme-settings')
+      const stored = localStorage.getItem(STORAGE_KEYS.THEME)
       if (stored) {
         try {
           const settings = JSON.parse(stored)
@@ -219,7 +221,7 @@ export const useThemeStore = defineStore('theme', {
         mode: this.mode,
         timestamp: Date.now()
       }
-      localStorage.setItem('theme-settings', JSON.stringify(settings))
+      localStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(settings))
     },
 
     /**

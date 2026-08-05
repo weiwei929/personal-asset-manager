@@ -1,3 +1,8 @@
+<!--
+  LEGACY · 未挂导航（D3）
+  一期银行主路径：BankAccounts.vue（四行活期 + 定期）。
+  本组件依赖旧 bank-deposits + 资金池划转，勿再接入 App.vue。
+-->
 <template>
   <div class="page-stack">
     <div class="page-toolbar">

@@ -1,12 +1,19 @@
 /**
- * 资金转换状态管理
- * 使用 Pinia 管理资金转换相关的数据和操作
+ * 资金转换状态管理（LEGACY · 已收口）
+ *
+ * 一期主路径：银行账户划转 / 月度入账活期 / 股基投入撤回 / 借出。
+ * 本 store 的 performTransfer（改旧 cashPool 已分配）已禁用。
+ * 文件保留仅为历史键清除与防误引用；App 导航不再挂载 TransferDialog。
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import FundTransfer from '../models/FundTransfer.js'
 import { useFinanceStore } from './finance.js'
+import { STORAGE_KEYS } from '../constants/storageKeys.js'
+
+/** 旧资金池划转写操作已关闭（D3） */
+export const LEGACY_FUND_TRANSFER_DISABLED = true
 
 export const useFundTransferStore = defineStore('fundTransfer', () => {
   // 状态
@@ -32,7 +39,7 @@ export const useFundTransferStore = defineStore('fundTransfer', () => {
   // 方法
   const loadTransfers = () => {
     try {
-      const stored = localStorage.getItem('fundTransfers')
+      const stored = localStorage.getItem(STORAGE_KEYS.FUND_TRANSFERS)
       if (stored) {
         const data = JSON.parse(stored)
         transfers.value = data.map(item => FundTransfer.fromJSON(item))
@@ -46,7 +53,7 @@ export const useFundTransferStore = defineStore('fundTransfer', () => {
   const saveTransfers = () => {
     try {
       const data = transfers.value.map(transfer => transfer.toJSON())
-      localStorage.setItem('fundTransfers', JSON.stringify(data))
+      localStorage.setItem(STORAGE_KEYS.FUND_TRANSFERS, JSON.stringify(data))
     } catch (error) {
       console.error('保存资金转换记录失败:', error)
       throw error
@@ -74,6 +81,12 @@ export const useFundTransferStore = defineStore('fundTransfer', () => {
   }
 
   const performTransfer = async (transferData) => {
+    if (LEGACY_FUND_TRANSFER_DISABLED) {
+      throw new Error(
+        '旧「资金池」划转已停用。请使用：银行账户（活期/定期/转账）、月度收支、股票/基金、个人借贷。'
+      )
+    }
+
     loading.value = true
     let ledgerApplied = null // 'allocate' | 'deallocate' | null
 
@@ -172,7 +185,7 @@ export const useFundTransferStore = defineStore('fundTransfer', () => {
 
   const clearAllTransfers = () => {
     transfers.value = []
-    localStorage.removeItem('fundTransfers')
+    localStorage.removeItem(STORAGE_KEYS.FUND_TRANSFERS)
     console.log('✅ 所有资金转换记录已清除')
   }
 

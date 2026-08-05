@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import BankDeposit from '../models/BankDeposit.js'
+import { LEGACY_STORAGE_KEYS } from '../constants/storageKeys.js'
 
 export const useBankDepositStore = defineStore('bankDeposit', {
   state: () => ({
@@ -123,9 +124,9 @@ export const useBankDepositStore = defineStore('bankDeposit', {
       return result;
     },
 
-    // 从本地存储加载数据
+    // 从本地存储加载数据（LEGACY 键；主路径用 bankAccounts）
     loadFromLocalStorage() {
-      const deposits = localStorage.getItem('bank-deposits')
+      const deposits = localStorage.getItem(LEGACY_STORAGE_KEYS.BANK_DEPOSITS)
       if (deposits) {
         const parsed = JSON.parse(deposits)
         // 重新创建BankDeposit对象以恢复方法
@@ -135,7 +136,10 @@ export const useBankDepositStore = defineStore('bankDeposit', {
 
     // 保存到本地存储
     saveToLocalStorage() {
-      localStorage.setItem('bank-deposits', JSON.stringify(this.deposits))
+      localStorage.setItem(
+        LEGACY_STORAGE_KEYS.BANK_DEPOSITS,
+        JSON.stringify(this.deposits)
+      )
     },
 
     // 清空所有存款

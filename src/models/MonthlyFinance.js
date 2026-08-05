@@ -1,93 +1,121 @@
-// 月度收支数据模型
+// 月度收支数据模型（T4：收入明细 + 三通道 + 入账差额）
+import {
+  deriveMonthTotals,
+  normalizeMonthRecord
+} from '../utils/monthlyLedger.js'
+import { emptyChannels } from '../constants/channels.js'
+
 export default class MonthlyFinance {
   constructor(month, income = 0, expense = 0, cumulativeNet = 0) {
-    this.id = month; // 格式: "2024-01"
-    this.month = month;
-    this.income = income; // 当月收入
-    this.expense = expense; // 当月支出
-    this.netIncome = income - expense; // 月净收入
-    this.cumulativeNet = cumulativeNet; // 累积净收入
-    this.allocated_amounts = {}; // 已分配的金额记录 {type: amount}
-    this.transfers = []; // 资金转换记录ID列表
-    this.isArchived = false; // 是否已归档
-    this.createdAt = new Date().toISOString();
-    this.updatedAt = new Date().toISOString();
+    this.id = month
+    this.month = month
+    this.incomes = []
+    this.channels = emptyChannels(null)
+    // 兼容：总数可由明细推导
+    this.income = income
+    this.expense = expense
+    this.netIncome = income - expense
+    this.cumulativeNet = cumulativeNet
+    this.postedEffects = {}
+    this.allocated_amounts = {}
+    this.transfers = []
+    this.isArchived = false
+    this.createdAt = new Date().toISOString()
+    this.updatedAt = new Date().toISOString()
   }
 
-  // 获取当前月份
   static getCurrentMonth() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   }
 
-  // 获取上一个月
   static getPreviousMonth(month) {
-    const [year, mon] = month.split('-').map(Number);
-    const date = new Date(year, mon - 1, 1);
-    date.setMonth(date.getMonth() - 1);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const [year, mon] = month.split('-').map(Number)
+    const date = new Date(year, mon - 1, 1)
+    date.setMonth(date.getMonth() - 1)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
   }
 
-  // 获取下一个月
   static getNextMonth(month) {
-    const [year, mon] = month.split('-').map(Number);
-    const date = new Date(year, mon - 1, 1);
-    date.setMonth(date.getMonth() + 1);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const [year, mon] = month.split('-').map(Number)
+    const date = new Date(year, mon - 1, 1)
+    date.setMonth(date.getMonth() + 1)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
   }
 
-  // 格式化月份显示
   static formatMonth(month) {
-    const [year, mon] = month.split('-');
-    return `${year}年${mon}月`;
+    const [year, mon] = month.split('-')
+    return `${year}年${mon}月`
   }
 
-  // 更新数据
+  static fromJSON(raw) {
+    const n = normalizeMonthRecord(raw, raw?.month || raw?.id)
+    const mf = new MonthlyFinance(n.month, n.income, n.expense)
+    Object.assign(mf, n)
+    return mf
+  }
+
+  /** 从明细重算 income / expense / netIncome */
+  recomputeTotals() {
+    const t = deriveMonthTotals(this.incomes, this.channels)
+    this.income = t.income
+    this.expense = t.expense
+    this.netIncome = t.netIncome
+    this.updatedAt = new Date().toISOString()
+    return t
+  }
+
+  /**
+   * 旧 API：仅总数（不改明细时使用）
+   */
   update(income, expense) {
-    this.income = income;
-    this.expense = expense;
-    this.netIncome = income - expense;
-    this.updatedAt = new Date().toISOString();
+    this.income = Number(income) || 0
+    this.expense = Number(expense) || 0
+    this.netIncome = this.income - this.expense
+    this.updatedAt = new Date().toISOString()
   }
 
-  // 计算累积净收入
+  /**
+   * 写入明细并重算
+   */
+  setDetail({ incomes, channels } = {}) {
+    if (Array.isArray(incomes)) this.incomes = incomes
+    if (channels) this.channels = { ...this.channels, ...channels }
+    this.recomputeTotals()
+  }
+
   calculateCumulative(previousCumulative = 0) {
-    this.cumulativeNet = previousCumulative + this.netIncome;
-    return this.cumulativeNet;
+    this.cumulativeNet = previousCumulative + this.netIncome
+    return this.cumulativeNet
   }
 
-  // 获取已分配的金额总计
   getAllocatedAmount() {
     if (!this.allocated_amounts) {
-      this.allocated_amounts = {};
-      return 0;
+      this.allocated_amounts = {}
+      return 0
     }
-    return Object.values(this.allocated_amounts).reduce((sum, amount) => sum + amount, 0);
+    return Object.values(this.allocated_amounts).reduce(
+      (sum, amount) => sum + (Number(amount) || 0),
+      0
+    )
   }
 
-  // 获取可用于转换的金额
   getAvailableAmount() {
-    const allocated = this.getAllocatedAmount();
-    return Math.max(0, this.netIncome - allocated);
+    return Math.max(0, this.netIncome - this.getAllocatedAmount())
   }
 
-  // 获取转换统计（按目标类型分组）
   getTransferSummary() {
-    if (!this.allocated_amounts) {
-      this.allocated_amounts = {};
-    }
-    return { ...this.allocated_amounts };
+    if (!this.allocated_amounts) this.allocated_amounts = {}
+    return { ...this.allocated_amounts }
   }
 
-  // 检查是否可以进行指定金额的转换
   canTransfer(amount) {
-    const available = this.getAvailableAmount();
-    return amount > 0 && amount <= available;
+    const available = this.getAvailableAmount()
+    return amount > 0 && amount <= available
   }
 
-  // 归档月度数据
   archive() {
-    this.isArchived = true;
-    this.updatedAt = new Date().toISOString();
+    this.isArchived = true
+    this.updatedAt = new Date().toISOString()
   }
 }

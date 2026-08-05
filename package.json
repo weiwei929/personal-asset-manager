@@ -20,7 +20,8 @@
     "build:prod": "vue-cli-service build --mode production",
     "preview": "npm run build && npx serve dist",
     "deploy:prepare": "node scripts/deploy-prepare.js",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "smoke": "node scripts/smoke-finance-logic.mjs"
   },
   "dependencies": {
     "core-js": "^3.8.3",

@@ -1,5 +1,10 @@
+<!--
+  LEGACY · 未挂导航（D3）
+  旧「资金池」转换对话框；performTransfer 已禁用。
+  划转请用 BankAccounts（活期↔定期 / 银行间 / 还信用卡）。
+-->
 <template>
-  <!-- 资金转换对话框 -->
+  <!-- 资金转换对话框（已停用写路径） -->
   <div v-if="visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" tabindex="-1" @keydown.esc="handleClose">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="transferDialogTitle">
       <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
