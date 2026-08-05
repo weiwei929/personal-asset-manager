@@ -170,19 +170,19 @@
     <section class="rounded-xl border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark p-5">
       <h3 class="text-sm font-medium mb-2">保存到当前账</h3>
       <p
-        class="text-base sm:text-lg font-semibold tracking-tight mb-1.5
-               text-text-light dark:text-text-dark"
+        class="text-base sm:text-lg font-semibold tracking-tight leading-snug mb-2
+               text-text-light dark:text-text-dark flex flex-wrap items-center gap-x-2 gap-y-1.5"
       >
-        将写入
+        <span>将写入</span>
         <span
-          class="mx-1 px-2 py-0.5 rounded-md
-                 bg-primary/10 text-primary dark:bg-primary/20"
+          class="inline-block px-2.5 py-0.5 rounded-md
+                 bg-primary text-white tabular-nums"
         >{{ selectedMonthLabel }}</span>
-      </p>
-      <p class="text-sm text-subtext-light dark:text-subtext-dark mb-2 tabular-nums">
-        收入 ¥{{ formatAmount(formTotals.income) }}
-        · 支出 ¥{{ formatAmount(formTotals.expense) }}
-        · 净流入 ¥{{ formatAmount(formTotals.netIncome) }}
+        <span class="tabular-nums font-semibold">
+          收入 ¥{{ formatAmount(formTotals.income) }}
+          · 支出 ¥{{ formatAmount(formTotals.expense) }}
+          · 净流入 ¥{{ formatAmount(formTotals.netIncome) }}
+        </span>
       </p>
       <p class="text-xs text-subtext-light dark:text-subtext-dark mb-3">
         默认：收入进指定活期、支出从指定活期扣；总资产随活期变。相对上次保存只调差额。
