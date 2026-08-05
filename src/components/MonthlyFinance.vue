@@ -168,10 +168,19 @@
 
     <!-- 保存：默认即时入账 -->
     <section class="rounded-xl border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark p-5">
-      <h3 class="text-sm font-medium mb-1">保存到当前账</h3>
-      <p class="text-xs text-subtext-light dark:text-subtext-dark mb-1">
-        将写入 <strong class="text-text-light dark:text-text-dark">{{ selectedMonthLabel }}</strong>
-        · 收入 ¥{{ formatAmount(formTotals.income) }}
+      <h3 class="text-sm font-medium mb-2">保存到当前账</h3>
+      <p
+        class="text-base sm:text-lg font-semibold tracking-tight mb-1.5
+               text-text-light dark:text-text-dark"
+      >
+        将写入
+        <span
+          class="mx-1 px-2 py-0.5 rounded-md
+                 bg-primary/10 text-primary dark:bg-primary/20"
+        >{{ selectedMonthLabel }}</span>
+      </p>
+      <p class="text-sm text-subtext-light dark:text-subtext-dark mb-2 tabular-nums">
+        收入 ¥{{ formatAmount(formTotals.income) }}
         · 支出 ¥{{ formatAmount(formTotals.expense) }}
         · 净流入 ¥{{ formatAmount(formTotals.netIncome) }}
       </p>
