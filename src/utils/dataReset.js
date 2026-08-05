@@ -400,15 +400,13 @@ export function showResetConfirmDialog(onConfirm) {
         <h3 style="margin: 0; color: #f56c6c;">确认重置数据</h3>
       </div>
       <p style="margin: 0 0 20px; color: #666; line-height: 1.5;">
-        此操作将清除所有数据，包括：<br>
+        将<strong>清空本机全部账本业务数据</strong>（开发调试用），包括：<br>
         • 期初建账与四银行账户<br>
-        • 收支记录<br>
-        • 银行存款 / 定期<br>
-        • 股票 / 基金<br>
-        • 个人借贷<br>
-        • 资金转换记录<br><br>
+        • 月度收支与账单<br>
+        • 定期 / 股票 / 基金 / 个人借贷<br><br>
+        登录密码会保留。清除后无法从本站恢复账本。<br>
         <strong style="color: #f56c6c;">此操作不可撤销！</strong><br>
-        <span style="font-size: 13px;">下一步将要求输入您的<strong>登录密码</strong>。</span>
+        <span style="font-size: 13px;">下一步需输入<strong>登录密码</strong>确认。</span>
       </p>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button id="cancel-reset" type="button" style="

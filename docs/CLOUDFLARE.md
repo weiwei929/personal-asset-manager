@@ -67,6 +67,22 @@ yarn install   # 或 npm install / pnpm i
 yarn build     # 产物在 dist/
 ```
 
+### 3.1 测试版诊断日志（推荐 CF 试运行）
+
+构建时注入：
+
+```bash
+# Windows PowerShell 示例
+$env:VUE_APP_DIAGNOSTICS="1"; npm run build
+```
+
+或复制 `.env.example` → `.env.production.local` 写入 `VUE_APP_DIAGNOSTICS=1`。
+
+- 侧栏出现 **「诊断日志」**（本机记录，不出网）
+- 出问题可「复制全部」对照
+- 正式生产不设或设 `0`（默认生产关闭；开发环境默认开）
+- 运行时也可：控制台 `localStorage.setItem('pam-diagnostics','1')` 后刷新
+
 预览：
 
 ```bash

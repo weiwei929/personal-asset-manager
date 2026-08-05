@@ -254,6 +254,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatAmount } from '../utils/format.js'
 import { BANKS, createId } from '../constants/banks.js'
 import { TOTAL_ASSETS_FORMULA } from '../constants/ledgerGuide.js'
+import { diagLog } from '../utils/diagnostics.js'
 import { useOpeningBalanceStore } from '../stores/openingBalance.js'
 import { useBankAccountsStore } from '../stores/bankAccounts.js'
 import { useStockInvestmentStore } from '../stores/stockInvestment.js'
@@ -392,9 +393,10 @@ async function submit() {
   if (alreadyOpened.value) {
     try {
       await ElMessageBox.confirm(
-        '将覆盖四银行、股票、基金与个人借贷列表。是否继续？',
-        '重新建账',
-        { type: 'warning', confirmButtonText: '覆盖写入', cancelButtonText: '取消' }
+        '将用表单内容覆盖四银行、股票、基金与个人借贷，并通常清空月度流水。\n' +
+          '这是整本账的大改，不是改一笔收支。确定要覆盖吗？',
+        '重新建账 · 请确认',
+        { type: 'warning', confirmButtonText: '确认覆盖', cancelButtonText: '取消' }
       )
     } catch {
       return
@@ -446,6 +448,11 @@ async function submit() {
 
     // 校验 store 总资产与预览一致
     const actual = assetsStore.totalAssets
+    diagLog('opening_complete', {
+      date: form.date,
+      overwrite: alreadyOpened.value,
+      totalAssets: actual
+    })
     if (Math.abs(actual - expected.totalAssets) > 0.02) {
       ElMessage.warning(
         `已保存，但校验略有偏差：预览 ¥${expected.totalAssets.toFixed(2)}，当前 ¥${actual.toFixed(2)}`
@@ -455,6 +462,7 @@ async function submit() {
     }
     emit('done')
   } catch (e) {
+    diagLog('opening_fail', { message: e?.message }, 'error')
     ElMessage.error(e.message || '建账失败')
   } finally {
     submitting.value = false

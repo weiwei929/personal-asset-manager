@@ -8,29 +8,53 @@
 
     <!-- 月份 + 摘要 -->
     <section class="rounded-xl border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark p-5">
-      <div class="flex flex-wrap items-end gap-4 mb-4">
-        <div>
-          <label class="block text-xs text-subtext-light dark:text-subtext-dark mb-1">所属月</label>
+      <div class="flex flex-wrap items-end gap-4 mb-3">
+        <div class="min-w-[12rem]">
+          <label class="block text-xs text-subtext-light dark:text-subtext-dark mb-1">所属月（写入哪个月）</label>
           <input
             v-model="selectedMonth"
             type="month"
-            class="field-input max-w-xs"
+            class="field-input max-w-xs text-base font-semibold"
             @change="loadMonthIntoForm"
           />
+          <p class="mt-1.5 text-sm font-medium text-text-light dark:text-text-dark">
+            将记入 · {{ selectedMonthLabel }}
+          </p>
         </div>
-        <p
-          v-if="isBeforeOpening"
-          class="text-xs text-amber-700 dark:text-amber-400 max-w-md leading-relaxed"
-        >
-          当前月早于建账基准 {{ openingMonthLabel }}。
-          建账前收支已含在期初余额中，正式路径请勿再入账；若只需对照，展开下方「高级」。
-        </p>
-        <p
-          v-else-if="isOpeningMonth"
-          class="text-xs text-amber-700 dark:text-amber-400 max-w-md leading-relaxed"
-        >
-          本月为建账月（基准 {{ openingDateLabel }}）：只录建账日<strong>之后</strong>的差额，勿把整月工资再入账一遍。
-        </p>
+        <div class="flex-1 min-w-[12rem] space-y-1.5">
+          <p
+            v-if="isCrossCalendarMonth"
+            class="text-xs rounded-lg px-3 py-2 leading-relaxed
+                   bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200
+                   border border-amber-200/80 dark:border-amber-900/40"
+          >
+            今天是 {{ calendarMonthLabel }}，你正在记
+            <strong>{{ selectedMonthLabel }}</strong>。
+            保存前请确认月份没错（以前容易把上月写成当月）。
+          </p>
+          <p
+            v-if="hasExistingMonthData"
+            class="text-xs rounded-lg px-3 py-2 leading-relaxed
+                   bg-slate-50 dark:bg-slate-900/40 text-subtext-light dark:text-subtext-dark
+                   border border-border-light dark:border-border-dark"
+          >
+            这个月<strong>已经有记录</strong>。再保存是<strong>改已有账</strong>（按差额调活期），
+            不是另外新建一套。若只是改金额，直接改后保存即可。
+          </p>
+          <p
+            v-if="isBeforeOpening"
+            class="text-xs text-amber-700 dark:text-amber-400 max-w-md leading-relaxed"
+          >
+            当前月早于建账基准 {{ openingMonthLabel }}。
+            建账前收支已含在期初余额中，正式路径请勿再入账；若只需对照，展开下方「高级」。
+          </p>
+          <p
+            v-else-if="isOpeningMonth"
+            class="text-xs text-amber-700 dark:text-amber-400 max-w-md leading-relaxed"
+          >
+            本月为建账月（基准 {{ openingDateLabel }}）：只录建账日<strong>之后</strong>的差额，勿把整月工资再入账一遍。
+          </p>
+        </div>
       </div>
 
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -145,6 +169,12 @@
     <!-- 保存：默认即时入账 -->
     <section class="rounded-xl border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark p-5">
       <h3 class="text-sm font-medium mb-1">保存到当前账</h3>
+      <p class="text-xs text-subtext-light dark:text-subtext-dark mb-1">
+        将写入 <strong class="text-text-light dark:text-text-dark">{{ selectedMonthLabel }}</strong>
+        · 收入 ¥{{ formatAmount(formTotals.income) }}
+        · 支出 ¥{{ formatAmount(formTotals.expense) }}
+        · 净流入 ¥{{ formatAmount(formTotals.netIncome) }}
+      </p>
       <p class="text-xs text-subtext-light dark:text-subtext-dark mb-3">
         默认：收入进指定活期、支出从指定活期扣；总资产随活期变。相对上次保存只调差额。
       </p>
@@ -343,6 +373,8 @@ import { useFinanceStore } from '../stores/finance.js'
 import { useBankAccountsStore } from '../stores/bankAccounts.js'
 import { useOpeningBalanceStore } from '../stores/openingBalance.js'
 import { useMonthlyStatementsStore } from '../stores/monthlyStatements.js'
+import { diagLog } from '../utils/diagnostics.js'
+import { incomeCategoryName } from '../constants/channels.js'
 
 const financeStore = useFinanceStore()
 const bankStore = useBankAccountsStore()
@@ -397,6 +429,32 @@ const existingPosted = computed(() => {
 const hasPriorPosting = computed(
   () => Object.keys(existingPosted.value).length > 0
 )
+
+const selectedMonthLabel = computed(() =>
+  MonthlyFinance.formatMonth(selectedMonth.value)
+)
+
+const calendarMonth = computed(() => MonthlyFinance.getCurrentMonth())
+const calendarMonthLabel = computed(() =>
+  MonthlyFinance.formatMonth(calendarMonth.value)
+)
+
+/** 所属月 ≠ 今天所在自然月（易记错月） */
+const isCrossCalendarMonth = computed(
+  () => selectedMonth.value !== calendarMonth.value
+)
+
+/** 该月已有流水或入账痕迹 */
+const hasExistingMonthData = computed(() => {
+  const row = financeStore.monthById(selectedMonth.value)
+  if (!row) return false
+  if (Object.keys(row.postedEffects || {}).length > 0) return true
+  if ((Number(row.income) || 0) > 0 || (Number(row.expense) || 0) > 0) return true
+  if (Array.isArray(row.incomes) && row.incomes.some(r => (Number(r.amount) || 0) > 0)) {
+    return true
+  }
+  return false
+})
 
 const targetEffects = computed(() =>
   postToDemand.value
@@ -562,15 +620,49 @@ function refreshStatementIfSealed(month) {
 async function regenerateStatement(month) {
   try {
     statementsStore.regenerateMonth(month)
+    diagLog('statement_regenerate', { month })
     ElMessage.success(
       `${MonthlyFinance.formatMonth(month)} 账单已按当前流水重生成（未改活期）`
     )
   } catch (e) {
+    diagLog('statement_regenerate_fail', { month, message: e?.message }, 'error')
     ElMessage.error(e.message || '重生成失败')
   }
 }
 
+/**
+ * 表单内两笔收入：同银行 + 同类目 + 同金额 → 疑似重复记两笔
+ * @returns {string|null} 提示文案
+ */
+function findDuplicateIncomeHint(incomes) {
+  const rows = (incomes || []).filter(r => (Number(r.amount) || 0) > 0)
+  const seen = new Map()
+  for (const r of rows) {
+    const key = `${r.bankId || ''}|${r.category || ''}|${Number(r.amount) || 0}`
+    if (seen.has(key)) {
+      const cat = incomeCategoryName(r.category)
+      const bank = getBankName(r.bankId) || r.bankId || '未选银行'
+      return `表单里有两笔相同收入：${cat} ¥${Number(r.amount)} → ${bank}。是故意记两笔，还是多加了一行？`
+    }
+    seen.set(key, true)
+  }
+  return null
+}
+
 async function save() {
+  const dupHint = findDuplicateIncomeHint(form.incomes)
+  if (dupHint) {
+    try {
+      await ElMessageBox.confirm(dupHint, '好像重复了', {
+        type: 'info',
+        confirmButtonText: '仍要保存',
+        cancelButtonText: '回去改'
+      })
+    } catch {
+      return
+    }
+  }
+
   saving.value = true
   try {
     const payload = buildDetailPayload()
@@ -580,6 +672,17 @@ async function save() {
     )
 
     const billRefreshed = refreshStatementIfSealed(selectedMonth.value)
+
+    diagLog('month_save', {
+      month: selectedMonth.value,
+      crossMonth: isCrossCalendarMonth.value,
+      postToDemand: result.postToDemand,
+      applied: result.applied?.length || 0,
+      income: result.totals?.income,
+      expense: result.totals?.expense,
+      billRefreshed,
+      hadDupConfirm: Boolean(dupHint)
+    })
 
     if (!result.postToDemand) {
       ElMessage.success(
@@ -597,6 +700,7 @@ async function save() {
     }
     loadMonthIntoForm()
   } catch (e) {
+    diagLog('month_save_fail', { month: selectedMonth.value, message: e?.message }, 'error')
     ElMessage.error(e.message || '保存失败')
   } finally {
     saving.value = false
@@ -606,12 +710,15 @@ async function save() {
 async function unpostLedger() {
   try {
     await ElMessageBox.confirm(
-      '将按本月「已入账」差额反向调整活期。若你已用「校正活期」对齐实卡，请勿使用本功能（会二次回滚）。',
+      `将撤销「${selectedMonthLabel.value}」已写入银行活期的入账差额（反向调整）。\n` +
+        '若你已在银行页手工改过活期对齐实卡，请勿使用（会再回滚一次）。\n' +
+        '流水仍会保留，可之后再保存。',
       '回滚该月活期入账',
       { type: 'warning', confirmButtonText: '确认回滚', cancelButtonText: '取消' }
     )
     saving.value = true
     const { applied } = financeStore.unpostMonthFromDemand(selectedMonth.value)
+    diagLog('month_unpost', { month: selectedMonth.value, applied: applied?.length || 0 })
     ElMessage.success(
       applied.length
         ? `已回滚 ${applied.length} 个银行活期`
@@ -629,11 +736,13 @@ async function unpostLedger() {
 async function removeMonth(month) {
   try {
     await ElMessageBox.confirm(
-      `删除 ${MonthlyFinance.formatMonth(month)} 并回滚该月已入账的活期变动？`,
-      '删除月份',
+      `将删除「${MonthlyFinance.formatMonth(month)}」整月流水，并回滚该月已入账的活期变动。\n` +
+        '此操作影响当前账数字；删错后需重新录入该月。',
+      '删除整月',
       { type: 'warning', confirmButtonText: '删除并回滚', cancelButtonText: '取消' }
     )
     financeStore.removeMonthWithLedger(month)
+    diagLog('month_remove', { month })
     ElMessage.success('已删除并回滚活期')
     if (selectedMonth.value === month) loadMonthIntoForm()
   } catch {

@@ -73,6 +73,15 @@
             <LineIcon name="trash" :size="18" class-name="mr-2.5 opacity-80" />
             <span class="text-sm">重置数据</span>
           </button>
+          <button
+            v-if="showDiagnostics"
+            type="button"
+            class="sidebar-nav-item w-full text-left"
+            @click="openDiagnostics"
+          >
+            <LineIcon name="layout" :size="18" class-name="mr-2.5 opacity-80" />
+            <span class="text-sm">诊断日志</span>
+          </button>
         </div>
       </aside>
 
@@ -215,6 +224,13 @@ import LineIcon from './components/LineIcon.vue'
 import { useOpeningBalanceStore } from './stores/openingBalance.js'
 import { useAuthStore } from './stores/auth.js'
 import { useIdleLogout } from './composables/useIdleLogout.js'
+import {
+  isDiagnosticsEnabled,
+  getDiagLogs,
+  formatDiagLogsText,
+  copyDiagLogs,
+  diagLog
+} from './utils/diagnostics.js'
 
 export default {
   name: 'App',
@@ -240,6 +256,7 @@ export default {
 
     const logout = () => {
       authStore.logout()
+      diagLog('logout')
       ElMessage.success('已退出登录（账本仍保留在本机）')
     }
 
@@ -247,6 +264,7 @@ export default {
       try {
         const { showSecureLogoutDialog } = await import('./utils/dataReset.js')
         await showSecureLogoutDialog(() => {
+          diagLog('secure_logout_wipe')
           ElMessage.success('本机账本已清除，即将回到登录页')
           setTimeout(() => window.location.reload(), 800)
         })
@@ -260,8 +278,38 @@ export default {
     const showMobileMenu = ref(false)
     const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
     const resetting = ref(false)
+    const showDiagnostics = ref(isDiagnosticsEnabled())
 
     const isDevelopment = process.env.NODE_ENV === 'development'
+
+    const openDiagnostics = async () => {
+      const { ElMessageBox } = await import('element-plus')
+      const logs = getDiagLogs()
+      const preview = formatDiagLogsText()
+      const short =
+        preview.length > 1200 ? preview.slice(0, 1200) + '\n…（已截断，复制可得全文）' : preview
+      try {
+        await ElMessageBox.confirm(
+          `本机诊断记录（共 ${logs.length} 条，不出网）。\n\n` +
+            '出问题可点「复制全部」发给协助排查的人。\n\n' +
+            short,
+          '诊断日志',
+          {
+            confirmButtonText: '复制全部',
+            cancelButtonText: '关闭',
+            distinguishCancelAndClose: true,
+            type: 'info'
+          }
+        )
+        const ok = await copyDiagLogs()
+        if (ok) ElMessage.success('已复制到剪贴板')
+        else ElMessage.warning('复制失败，请重试或打开控制台查看')
+      } catch (action) {
+        if (action === 'cancel') {
+          /* close */
+        }
+      }
+    }
     const isMobile = computed(() => windowWidth.value < 768)
 
     const menuItems = [
@@ -327,6 +375,7 @@ export default {
         resetting.value = true
         const { showResetConfirmDialog } = await import('./utils/dataReset.js')
         await showResetConfirmDialog(() => {
+          diagLog('dev_reset_data')
           ElMessage.success('数据重置成功，页面即将刷新')
           setTimeout(() => {
             window.location.reload()
@@ -349,6 +398,10 @@ export default {
       if (!openingStore.hasOpenedBooks) {
         activeMenu.value = 'opening-books'
       }
+      diagLog('app_ready', {
+        hasOpenedBooks: openingStore.hasOpenedBooks,
+        diagnostics: showDiagnostics.value
+      })
     })
 
     onUnmounted(() => {
@@ -360,6 +413,8 @@ export default {
       showMobileMenu,
       isMobile,
       isDevelopment,
+      showDiagnostics,
+      openDiagnostics,
       resetting,
       hasOpenedBooks,
       isAuthenticated,
