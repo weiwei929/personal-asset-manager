@@ -47,6 +47,29 @@
           <button
             type="button"
             class="sidebar-nav-item w-full text-left"
+            @click="exportBackup"
+          >
+            <LineIcon name="layers" :size="18" class-name="mr-2.5 opacity-80" />
+            <span class="text-sm">导出备份</span>
+          </button>
+          <button
+            type="button"
+            class="sidebar-nav-item w-full text-left"
+            @click="openImportPicker"
+          >
+            <LineIcon name="transfer" :size="18" class-name="mr-2.5 opacity-80" />
+            <span class="text-sm">导入备份</span>
+          </button>
+          <input
+            ref="importFileInput"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            @change="onImportFileChange"
+          />
+          <button
+            type="button"
+            class="sidebar-nav-item w-full text-left"
             @click="logout"
           >
             <LineIcon name="close" :size="18" class-name="mr-2.5 opacity-80" />
@@ -149,6 +172,20 @@
             >
               <LineIcon name="calendar" :size="18" class-name="mr-2.5 opacity-80" />
               <span class="text-sm">{{ hasOpenedBooks ? '重新建账' : '期初建账' }}</span>
+            </button>
+            <button
+              type="button"
+              class="sidebar-nav-item w-full text-left mt-2"
+              @click="exportBackup(); showMobileMenu = false"
+            >
+              <span class="text-sm">导出备份</span>
+            </button>
+            <button
+              type="button"
+              class="sidebar-nav-item w-full text-left mt-1"
+              @click="showMobileMenu = false; openImportPicker()"
+            >
+              <span class="text-sm">导入备份</span>
             </button>
             <button
               type="button"
@@ -270,6 +307,59 @@ export default {
         })
       } catch (e) {
         if (e?.message) ElMessage.error(e.message)
+      }
+    }
+
+    // 导出/导入备份（G4 可恢复 · E1）
+    const importFileInput = ref(null)
+
+    const exportBackup = async () => {
+      try {
+        const { collectLedgerData, downloadBackup } = await import('./utils/ledgerBackup.js')
+        const backup = collectLedgerData((key) => localStorage.getItem(key))
+        if (Object.keys(backup.data).length === 0) {
+          ElMessage.warning('当前无账本数据可导出')
+          return
+        }
+        const filename = downloadBackup(backup)
+        diagLog('export_backup', { filename, keys: Object.keys(backup.data).length })
+        ElMessage.success(`已导出备份：${filename}`)
+      } catch (e) {
+        ElMessage.error('导出失败：' + (e?.message || e))
+      }
+    }
+
+    const openImportPicker = () => {
+      if (importFileInput.value) importFileInput.value.click()
+    }
+
+    const onImportFileChange = async (e) => {
+      const file = e.target.files?.[0]
+      if (e.target) e.target.value = '' // 允许再次选择同一文件
+      if (!file) return
+      try {
+        const { ElMessageBox } = await import('element-plus')
+        await ElMessageBox.confirm(
+          `将以备份文件「${file.name}」覆盖当前账本（银行、收支、投资、借贷等全部业务数据）。\n\n` +
+            '导入前建议先「导出备份」。此操作不可撤销！',
+          '确认导入备份',
+          {
+            confirmButtonText: '确认覆盖导入',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
+        const { importBackupFromFile } = await import('./utils/ledgerBackup.js')
+        const { written } = await importBackupFromFile(file)
+        diagLog('import_backup', { filename: file.name, written: written.length })
+        ElMessage.success(`导入成功（${written.length} 项），页面即将刷新`)
+        setTimeout(() => window.location.reload(), 1200)
+      } catch (action) {
+        if (action === 'cancel' || action === 'close') {
+          ElMessage.info('已取消导入')
+          return
+        }
+        ElMessage.error('导入失败：' + (action?.message || action))
       }
     }
 
@@ -427,7 +517,11 @@ export default {
       resetAllData,
       onOpeningDone,
       logout,
-      secureLogout
+      secureLogout,
+      importFileInput,
+      exportBackup,
+      openImportPicker,
+      onImportFileChange
     }
   }
 }

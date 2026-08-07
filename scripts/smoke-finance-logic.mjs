@@ -636,4 +636,98 @@ assert(calcCashPool(legacyMonths) === 7000, 'legacy pool 分配后')
 assert(calcCashPool(legacyMonths) !== 245000, 'legacy pool 不得被当成 fixture 总资产')
 console.log('OK legacy cashPool (appendix only, not totalAssets)')
 
+// ─── E1 导出/导入 round-trip（G4 可恢复；与 src/utils/ledgerBackup.js 镜像对齐，改须双改）──
+function collectLedgerSmoke(readFn) {
+  const data = {}
+  for (const key of CLEARABLE_SMOKE) {
+    const raw = readFn(key)
+    if (raw == null) continue
+    try {
+      data[key] = JSON.parse(raw)
+    } catch {
+      data[key] = raw
+    }
+  }
+  return {
+    format: 'pam-ledger-backup',
+    formatVersion: 1,
+    app: 'personal-asset-manager',
+    exportedAt: new Date().toISOString(),
+    data
+  }
+}
+function isValidBackupSmoke(obj) {
+  return (
+    obj != null &&
+    typeof obj === 'object' &&
+    obj.format === 'pam-ledger-backup' &&
+    obj.formatVersion === 1 &&
+    obj.data != null &&
+    typeof obj.data === 'object'
+  )
+}
+function replaceLedgerSmoke(backup, clearFn, writeFn) {
+  if (!isValidBackupSmoke(backup)) {
+    throw new Error('备份文件格式不正确（非 pam-ledger-backup v1）')
+  }
+  for (const key of CLEARABLE_SMOKE) clearFn(key)
+  const written = []
+  for (const [key, value] of Object.entries(backup.data)) {
+    if (!CLEARABLE_SMOKE.includes(key)) continue
+    writeFn(key, typeof value === 'string' ? value : JSON.stringify(value))
+    written.push(key)
+  }
+  return written
+}
+
+// 内存模拟 localStorage：部分业务键有数据（含旧过渡键与 LEGACY 键）
+const store = new Map()
+const seedBackup = {
+  'pam-bank-accounts': [{ id: 'cmb', demandBalance: 53400 }],
+  'pam-opening-balance': { date: '2026-07-01', completedAt: '2026-07-01T00:00:00Z' },
+  monthlyFinances: { '2026-07': { income: 15000, expense: 7700 } },
+  'stock-investments': [{ name: 'A', investedPrincipal: 30000, currentValue: 35000 }],
+  'lent-money-records': [{ borrower: '张三', amount: 5000, status: 'pending' }],
+  'bank-deposits': [{ id: 'legacy-1' }] // LEGACY 兼容键
+}
+for (const [k, v] of Object.entries(seedBackup)) store.set(k, JSON.stringify(v))
+const readSmoke = (key) => (store.has(key) ? store.get(key) : null)
+const clearSmoke = (key) => store.delete(key)
+const writeSmoke = (key, value) => store.set(key, value)
+
+const backup1 = collectLedgerSmoke(readSmoke)
+assert(backup1.format === 'pam-ledger-backup' && backup1.formatVersion === 1, '备份格式/版本')
+assert(isValidBackupSmoke(backup1), 'isValidBackup true')
+assert(Object.keys(backup1.data).length === Object.keys(seedBackup).length, '收集全部业务键')
+assert(backup1.data['pam-bank-accounts'][0].demandBalance === 53400, '备份数据可解析')
+
+// round-trip：覆盖写回后 collect 应与原一致
+const writtenKeys = replaceLedgerSmoke(backup1, clearSmoke, writeSmoke)
+assert(writtenKeys.length === Object.keys(seedBackup).length, '写入键数一致')
+const re1 = collectLedgerSmoke(readSmoke)
+assert(JSON.stringify(re1.data) === JSON.stringify(backup1.data), 'round-trip 数据一致')
+
+// 防御：备份混入 pam-auth 被忽略（不得覆盖登录凭证）
+const tampered = {
+  ...backup1,
+  data: { ...backup1.data, 'pam-auth': { salt: 'x', hash: 'y' } }
+}
+const w2Tampered = replaceLedgerSmoke(tampered, clearSmoke, writeSmoke)
+assert(!w2Tampered.includes('pam-auth'), 'pam-auth 不得被导入写入')
+assert(!store.has('pam-auth'), 'pam-auth 未落盘')
+
+// 非法格式拒绝
+let threwBad = false
+try {
+  replaceLedgerSmoke({ format: 'other', formatVersion: 9, data: {} }, clearSmoke, writeSmoke)
+} catch {
+  threwBad = true
+}
+assert(threwBad, '非法格式应抛错')
+assert(
+  !isValidBackupSmoke({ format: 'pam-ledger-backup', formatVersion: 2, data: {} }),
+  '版本不符拒绝'
+)
+console.log('OK export/import round-trip, keys =', Object.keys(backup1.data).length)
+
 console.log('OK smoke-finance-logic: all assertions passed')
