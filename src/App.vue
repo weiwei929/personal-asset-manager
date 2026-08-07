@@ -243,6 +243,35 @@
       </div>
     </div>
   </div>
+      <div
+      v-if="syncConflict"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      @click.self="syncConflict = null"
+    >
+      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">云端账本有更新</h3>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+          本机和云端都修改过账本（云端更新于
+          {{ new Date(syncConflict.serverUpdatedAt).toLocaleString() }}）。请选择保留哪一份：
+        </p>
+        <div class="mt-4 flex gap-3">
+          <button
+            type="button"
+            class="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            @click="chooseCloud"
+          >
+            用云端（覆盖本机）
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+            @click="chooseLocal"
+          >
+            用本机（覆盖云端）
+          </button>
+        </div>
+      </div>
+    </div>
 </template>
 
 <script>
@@ -268,6 +297,7 @@ import {
   copyDiagLogs,
   diagLog
 } from './utils/diagnostics.js'
+import { initSync, resolveConflictUseLocal, resolveConflictUseCloud } from './utils/cloudSync.js'
 
 export default {
   name: 'App',
@@ -288,7 +318,8 @@ export default {
     const isAuthenticated = computed(() => authStore.isAuthenticated)
     useIdleLogout(isAuthenticated)
 
-    const openingStore = useOpeningBalanceStore()
+    const openingStore = useOpeningBalanceStore()    
+    const syncConflict = ref(null) // 云端冲突信息 { serverVersion, serverUpdatedAt }
     const hasOpenedBooks = computed(() => openingStore.hasOpenedBooks)
 
     const logout = () => {
@@ -492,11 +523,33 @@ export default {
         hasOpenedBooks: openingStore.hasOpenedBooks,
         diagnostics: showDiagnostics.value
       })
+      initSync({
+        onConflict: (serverVersion, serverUpdatedAt) => {
+          syncConflict.value = { serverVersion, serverUpdatedAt }
+        },
+        onHydrated: () => {
+          ElMessage.success('已从云端同步最新账本')
+          window.location.reload()
+        }
+      })
     })
 
     onUnmounted(() => {
       window.removeEventListener('resize', handleResize)
     })
+
+      const chooseLocal = async () => {
+      if (!syncConflict.value) return
+      await resolveConflictUseLocal(syncConflict.value.serverVersion)
+      syncConflict.value = null
+      ElMessage.success('已用本地账本覆盖云端')
+    }
+
+    const chooseCloud = async () => {
+      if (!syncConflict.value) return
+      await resolveConflictUseCloud()
+      syncConflict.value = null
+    }
 
     return {
       activeMenu,
@@ -521,7 +574,10 @@ export default {
       importFileInput,
       exportBackup,
       openImportPicker,
-      onImportFileChange
+      onImportFileChange,
+      syncConflict,
+      chooseLocal,
+      chooseCloud
     }
   }
 }
