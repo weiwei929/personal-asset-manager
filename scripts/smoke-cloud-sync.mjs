@@ -30,7 +30,8 @@ async function mockFetch(url, opts = {}) {
           json: async () => ({ error: 'conflict', serverVersion: server.version, serverUpdatedAt: server.updatedAt })
         }
       }
-      const next = { version: server.version + 1, updatedAt: now, data: body.data }
+      // 镜像 P1 服务端：clientVersion > server.version（stale read / 云端被重置）→ 吸收并跳版本
+      const next = { version: Math.max(server.version, body.version) + 1, updatedAt: now, data: body.data }
       cloudKV.set(EMAIL_KEY, JSON.stringify(next))
       return { status: 200, ok: true, json: async () => ({ version: next.version, updatedAt: next.updatedAt }) }
     }
