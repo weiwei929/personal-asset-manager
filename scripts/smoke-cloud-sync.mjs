@@ -112,4 +112,77 @@ assert.deepEqual(
 assert.equal(devB.getLocalVersion(), 3)
 console.log('✓ 冲突解决「用云端」→ B 本地被云端覆盖')
 
-console.log('\nOK cloud-sync smoke: 全部通过（A 推云 / B 拉云 / 409 冲突 / 双向解决）')
+// ═══════════════ P1 新增：F1 断网补推 + 前台拉取不写存储 ═══════════════
+// 先等旧用例残留的防抖推送落定（B 的 balance-999 setItem 会在 2s 后把云端顶到 v4），
+// 保证后续版本断言确定性。
+await sleep(2600)
+cloud = JSON.parse(cloudKV.get(EMAIL_KEY))
+assert.equal(cloud.version, 4, '旧用例残留推送落定后云端应为 v4')
+
+// 包装 fetch：可模拟断网（网络错误 = TypeError，与浏览器离线行为一致）
+let online = true
+const realFetch = globalThis.fetch
+globalThis.fetch = async (url, opts) => {
+  if (!online) throw new TypeError('Failed to fetch (offline simulated)')
+  return realFetch(url, opts)
+}
+
+// ── F1：断网记账 → 联网后补推（dirty 持久化 + pullOnStart 重试） ──
+const lsC = createLocalStorage()
+globalThis.localStorage = lsC
+const devC = await import('../src/utils/cloudSync.js?browser=C')
+devC.initSync({})
+await sleep(800) // C 启动拉云（当前云端 v4）
+assert.equal(devC.getLocalVersion(), 4, 'C 启动应拉到云端 v4')
+
+online = false // 断网
+lsC.setItem('pam-bank-movements', JSON.stringify([{ id: 99, desc: 'C 离线记的一笔' }]))
+await sleep(2600) // 防抖触发 → 推云失败
+assert.ok(lsC.getItem('pam-sync-dirty') != null, '断网记账后应置 dirty 标记') // ← 修复前红
+
+online = true // 联网重启
+await devC.pullOnStart()
+await sleep(2600) // dirty → 补推
+cloud = JSON.parse(cloudKV.get(EMAIL_KEY))
+assert.ok(
+  cloud.data['pam-bank-movements']?.some((m) => m.id === 99),
+  '联网后 C 的离线流水应补推上云' // ← 修复前红
+)
+assert.equal(lsC.getItem('pam-sync-dirty'), null, '补推成功后 dirty 应清除')
+console.log('✓ F1 断网记账 → 联网补推上云，dirty 清除')
+
+// ── 前台拉取：命中新数据 → 不写存储、只回调 onRemoteAhead ──
+const lsD = createLocalStorage()
+globalThis.localStorage = lsD
+let remoteAhead = null
+let dHydrated = 0
+const devD = await import('../src/utils/cloudSync.js?browser=D')
+devD.initSync({
+  onRemoteAhead: (v, ua) => { remoteAhead = { v, ua } },
+  onHydrated: () => { dHydrated++ }
+})
+await sleep(800) // D 启动拉云（当前云端 v5，C 补推后）
+assert.equal(devD.getLocalVersion(), 5, 'D 启动应拉到云端 v5')
+
+// A 先拉到 v5，再推一笔 → 云端 v6
+await devA.pullOnStart()
+await sleep(100)
+lsA.setItem('pam-bank-accounts', JSON.stringify([{ id: 1, bank: 'A银行', balance: 3000 }]))
+await sleep(2600)
+cloud = JSON.parse(cloudKV.get(EMAIL_KEY))
+assert.equal(cloud.version, 6, 'A 推云后应为 v6')
+
+const before = lsD.getItem('pam-bank-accounts')
+await devD.pullOnStart({ foreground: true }) // D 回前台
+await sleep(100)
+
+assert.equal(devD.getLocalVersion(), 5, '前台拉取不应更新本地版本') // ← 修复前红
+assert.equal(lsD.getItem('pam-bank-accounts'), before, '前台拉取不应改写 localStorage') // ← 修复前红
+assert.ok(remoteAhead, '前台拉取应回调 onRemoteAhead') // ← 修复前红
+assert.equal(dHydrated, 1, '前台拉取不应触发 hydrate（仅启动那次）') // ← 修复前红
+console.log('✓ 前台拉取：只提示不写存储，版本不动')
+
+// 清理 C 可能残留的定时器（防进程滞留）
+devC.resetSyncState()
+
+console.log('\nOK cloud-sync smoke: 全部通过（A 推云 / B 拉云 / 409 冲突 / 双向解决 / F1 断网补推 / 前台拉取不写存储）')
