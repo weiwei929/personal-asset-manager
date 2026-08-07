@@ -272,6 +272,14 @@
         </div>
       </div>
     </div>
+    <!-- P1：回前台发现云端有新数据 → 提示条（点按刷新，不自动 reload 以免打断输入） -->
+    <div
+      v-if="syncRemoteAhead"
+      class="fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 cursor-pointer rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+      @click="refreshForRemoteAhead"
+    >
+      云端有新的账本数据，点击刷新查看
+    </div>
 </template>
 
 <script>
@@ -297,7 +305,7 @@ import {
   copyDiagLogs,
   diagLog
 } from './utils/diagnostics.js'
-import { initSync, resolveConflictUseLocal, resolveConflictUseCloud } from './utils/cloudSync.js'
+import { initSync, resolveConflictUseLocal, resolveConflictUseCloud, getRemoteLedger, serializeLocal } from './utils/cloudSync.js'
 
 export default {
   name: 'App',
@@ -320,6 +328,7 @@ export default {
 
     const openingStore = useOpeningBalanceStore()    
     const syncConflict = ref(null) // 云端冲突信息 { serverVersion, serverUpdatedAt }
+    const syncRemoteAhead = ref(null) // 回前台发现云端更新 { version, updatedAt }（提示条）
     const hasOpenedBooks = computed(() => openingStore.hasOpenedBooks)
 
     const logout = () => {
@@ -333,8 +342,17 @@ export default {
         const { showSecureLogoutDialog } = await import('./utils/dataReset.js')
         await showSecureLogoutDialog(() => {
           diagLog('secure_logout_wipe')
-          ElMessage.success('本机账本已清除，即将回到登录页')
-          setTimeout(() => window.location.reload(), 800)
+          ElMessage.success('本机账本已清除，正在退出 Cloudflare 登录…')
+          setTimeout(() => {
+            const host = window.location.hostname
+            const isLocalDev = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === ''
+            if (isLocalDev) {
+              window.location.reload() // dev 环境无 Access 门禁，退回本地刷新
+            } else {
+              // 结束 Access 会话：不跳转则下一个人打开页面会把云端账本拉回本机
+              window.location.assign('/cdn-cgi/access/logout')
+            }
+          }, 800)
         })
       } catch (e) {
         if (e?.message) ElMessage.error(e.message)
@@ -530,6 +548,13 @@ export default {
         onHydrated: () => {
           ElMessage.success('已从云端同步最新账本')
           window.location.reload()
+        },
+        onRemoteAhead: (version, updatedAt) => {
+          if (syncRemoteAhead.value) return // 已展示则不重复提示
+          syncRemoteAhead.value = { version, updatedAt }
+        },
+        onAuthExpired: () => {
+          ElMessage.warning('云同步已断开（登录会话过期），请刷新页面重新登录')
         }
       })
     })
@@ -538,17 +563,78 @@ export default {
       window.removeEventListener('resize', handleResize)
     })
 
-      const chooseLocal = async () => {
+    /** 冲突覆盖前，把「将被丢弃的那一份」落盘备份（I2；iOS 可能拦下载，另写 localStorage 兜底） */
+    const stashDiscardedBackup = async (data, note) => {
+      try {
+        const { downloadBackup, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } = await import('./utils/ledgerBackup.js')
+        const backup = {
+          format: BACKUP_FORMAT,
+          formatVersion: BACKUP_FORMAT_VERSION,
+          app: 'personal-asset-manager',
+          exportedAt: new Date().toISOString(),
+          note,
+          data
+        }
+        try {
+          localStorage.setItem('pam-sync-lastDiscarded', JSON.stringify(backup))
+        } catch (e) {
+          console.warn('[sync] 覆盖前备份写 localStorage 失败:', e?.message || e)
+        }
+        downloadBackup(backup)
+      } catch (e) {
+        console.warn('[sync] 覆盖前备份失败:', e?.message || e)
+      }
+    }
+
+    const chooseLocal = async () => {
       if (!syncConflict.value) return
-      await resolveConflictUseLocal(syncConflict.value.serverVersion)
-      syncConflict.value = null
-      ElMessage.success('已用本地账本覆盖云端')
+      try {
+        // 用最新的云端版本做基线，顺便取「将被覆盖的云端副本」用于备份
+        const remote = await getRemoteLedger()
+        if (remote) {
+          await stashDiscardedBackup(remote.data, '用本地覆盖前·云端账本')
+        }
+        const result = await resolveConflictUseLocal(remote ? remote.version : syncConflict.value.serverVersion)
+        if (result && result.conflict) {
+          // 云端在刚才又被别处更新 → 不谎报成功，重弹窗
+          syncConflict.value = { serverVersion: result.serverVersion, serverUpdatedAt: result.serverUpdatedAt }
+          ElMessage.warning('云端在刚才又有更新，请重新选择')
+          return
+        }
+        if (result && !result.ok) {
+          syncConflict.value = null
+          ElMessage.warning(result.reason === 'empty-local' ? '本机已无数据，未执行覆盖' : '操作未完成')
+          return
+        }
+        syncConflict.value = null
+        syncRemoteAhead.value = null
+        ElMessage.success('已用本地账本覆盖云端')
+      } catch (e) {
+        ElMessage.error('操作失败：' + (e?.message || e))
+      }
     }
 
     const chooseCloud = async () => {
       if (!syncConflict.value) return
-      await resolveConflictUseCloud()
-      syncConflict.value = null
+      try {
+        const localData = serializeLocal()
+        if (Object.keys(localData).length > 0) {
+          await stashDiscardedBackup(localData, '用云端覆盖前·本机账本')
+        }
+        const result = await resolveConflictUseCloud()
+        if (result && result.reason === 'no-cloud-data') {
+          ElMessage.warning('云端暂无数据，已取消')
+          return
+        }
+        syncConflict.value = null
+        syncRemoteAhead.value = null
+      } catch (e) {
+        ElMessage.error('操作失败：' + (e?.message || e))
+      }
+    }
+
+    const refreshForRemoteAhead = () => {
+      window.location.reload()
     }
 
     return {
@@ -576,6 +662,8 @@ export default {
       openImportPicker,
       onImportFileChange,
       syncConflict,
+      syncRemoteAhead,
+      refreshForRemoteAhead,
       chooseLocal,
       chooseCloud
     }
