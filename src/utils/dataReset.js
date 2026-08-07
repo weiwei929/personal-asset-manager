@@ -11,6 +11,7 @@ import {
   PRESERVED_ON_RESET_KEYS
 } from '../constants/storageKeys.js'
 import { useAuthStore } from '../stores/auth.js'
+import { resetSyncState } from './cloudSync.js'
 
 /** 与 ALL_CLEARABLE_KEYS 一致，勿在本文件另列魔法字符串 */
 const CLEARABLE_KEYS = [...ALL_CLEARABLE_KEYS]
@@ -81,6 +82,12 @@ export function clearAllData() {
       JSON.stringify(DEFAULT_CATEGORIES)
     )
 
+    // 重置语义 A：同步状态一并归零（清版本号 + dirty + 取消待推/待重试定时器）。
+    // 必须排在上面的 removeItem 循环与分类 setItem 之后——那些写操作会经 patch 过的
+    // localStorage 置 dirty 并排上防抖推送，先清会被它们重新点亮。
+    // 效果：重置只影响本机；云端账本保留，下次启动会重新同步回来。
+    resetSyncState()
+
     // eslint-disable-next-line no-console
     console.log(
       '✅ 业务数据已清除（保留:',
@@ -130,9 +137,12 @@ export function showSecureLogoutDialog(onSuccess) {
         适用于<strong>公共电脑 / 借出设备</strong>离开前：<br><br>
         • 清除本机账本业务数据（银行、收支、投资、借贷等）<br>
         • 退出当前登录会话<br>
+        • 结束 Cloudflare 登录（Access 会话一并退出，防止下一个人把云端账本拉回本机）<br>
         • <strong>保留</strong>登录密码（回到本机后可重新登录并建账）<br><br>
         与「退出登录」不同：退出登录<strong>不删</strong>账本。<br>
-        <strong style="color: #f56c6c;">清除后无法从本站恢复账本！</strong>
+        云端账本<strong>保留</strong>：重新登录后会自动同步回来（如需彻底清除云端，
+        请先导出备份，再到 Cloudflare 控制台删除）。<br>
+        <strong style="color: #f56c6c;">本机数据清除后不可撤销！</strong>
       </p>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button id="cancel-secure" type="button" style="
@@ -404,7 +414,8 @@ export function showResetConfirmDialog(onConfirm) {
         • 期初建账与四银行账户<br>
         • 月度收支与账单<br>
         • 定期 / 股票 / 基金 / 个人借贷<br><br>
-        登录密码会保留。清除后无法从本站恢复账本。<br>
+        登录密码会保留。<br>
+        <strong style="color: #409EFF;">云端账本保留，下次启动会从云端重新同步（重置仅影响本机）。</strong><br>
         <strong style="color: #f56c6c;">此操作不可撤销！</strong><br>
         <span style="font-size: 13px;">下一步需输入<strong>登录密码</strong>确认。</span>
       </p>
