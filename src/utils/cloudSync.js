@@ -1,5 +1,5 @@
 /**
- * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1' + S4'/M8'）
+ * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1' + S2'/M2'+M4' + S4'/M8'）
  *
  * 权威限定：settle 时刻以 KV 为准；两次 settle 之间真源仍是本机内存 / localStorage。
  *
@@ -10,6 +10,12 @@
  * - P0-4：hydrate 失败不写 version、闸门保持关闭
  * - P0-5：fetch AbortController ~9s，超时走 offline 分支
  *
+ * S2' / M2' + M4'：
+ * - P1-1：版本相同仅指纹不同 → **绝不**静默跟云；保守保留本机并补推
+ * - P0-4：hydrate 快照回滚（失败还原本机，不写 version，needRepull）
+ * - P1-3：empty-cloud 区分从未上云 / 云端消失；本机有数据 + 404 → 补推；身份 best-effort 前置
+ * - P1-2：冲突摘要 / pam-sync-lastDiscarded 恢复辅助（UI 在 App.vue）
+ *
  * S4' / M8'：
  * - setLocalVersion 同处写入 pam-cloud-bound（P0-2(c)）
  * - resetSyncState 不得清 pam-cloud-bound（C2）
@@ -17,11 +23,20 @@
  *
  * 冲突解决路径显式豁免闸门（用户显式决定）。
  */
-import { collectLedgerData, replaceLedgerData, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from './ledgerBackup.js'
+import {
+  collectLedgerData,
+  replaceLedgerData,
+  isValidBackup,
+  BACKUP_FORMAT,
+  BACKUP_FORMAT_VERSION
+} from './ledgerBackup.js'
+import { calcAssetBreakdown } from './assetTotals.js'
 import { ALL_CLEARABLE_KEYS, STORAGE_KEYS } from '../constants/storageKeys.js'
 
 const SYNC_META_KEY = 'pam-sync-meta'
 const DIRTY_KEY = 'pam-sync-dirty'
+/** 冲突覆盖前被丢弃副本（I2 / P1-2） */
+export const LAST_DISCARDED_KEY = 'pam-sync-lastDiscarded'
 const API_BASE = '/api/ledger'
 const DEBOUNCE_MS = 2000
 const RETRY_MS = 30000
@@ -40,6 +55,14 @@ let retryTimer = null
 let lastForegroundPullAt = 0
 let pushing = false
 let suppressing = false
+/** 最近一次 empty-cloud 分类：never-uploaded | cloud-vanished | null */
+let lastEmptyCloudKind = null
+/**
+ * 可选：注入当前身份 emailHash getter（Access 客户端 email 不可用时保持未注入）。
+ * 仅用于 P1-3 补推身份前置；无可靠源时放行补推（见 shouldBlockEmptyCloudCatchUp）。
+ */
+let identityHashGetter = null
+
 let handlers = {
   onConflict: null,
   onHydrated: null,
@@ -47,7 +70,9 @@ let handlers = {
   onAuthExpired: null,
   onHydrateFailed: null,
   /** S4'：settle 结论回调（含 online/回前台 re-settle），供离线绑定门闸 */
-  onSettle: null
+  onSettle: null,
+  /** S2'：empty-cloud 因身份不一致被拦截 */
+  onIdentityBlocked: null
 }
 
 /** B1/C1：推送闸门（内存态；刷新即关闭） */
@@ -179,6 +204,116 @@ export function shouldBlockEmptyLedgerOnboarding(settleOutcome) {
   return settleOutcome === 'offline' && isCloudBound() && !hasOpenedBooksInStorage()
 }
 
+/**
+ * 注入当前身份 emailHash getter（可选；无 Access 客户端 email 时勿伪造）。
+ * @param {(() => string|null)|null} fn
+ */
+export function setIdentityHashGetter(fn) {
+  identityHashGetter = typeof fn === 'function' ? fn : null
+}
+
+function currentIdentityHash() {
+  try {
+    const v = identityHashGetter?.()
+    return typeof v === 'string' && v.length > 0 ? v : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * P1-3 身份前置：仅当 bound.emailHash 与「可检测的当前身份」明确冲突时拦截补推。
+ * 无 emailHash / 无可靠当前身份源 → 不拦截（best-effort，见 PR 说明）。
+ */
+export function shouldBlockEmptyCloudCatchUp() {
+  const bound = getCloudBoundMark()
+  if (!bound?.emailHash) return false
+  const current = currentIdentityHash()
+  if (current == null) return false
+  return current !== bound.emailHash
+}
+
+/** @returns {'never-uploaded'|'cloud-vanished'|null} */
+export function getLastEmptyCloudKind() {
+  return lastEmptyCloudKind
+}
+
+/**
+ * P1-1：稳定 payload 指纹（非加密；仅用于同版本内容异常检测）。
+ * 版本相同且指纹不同 → 不得静默跟云。
+ */
+export function fingerprintPayload(data) {
+  if (data == null || typeof data !== 'object') return ''
+  const stable = (v) => {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v)
+    if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`
+    const keys = Object.keys(v).sort()
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}`
+  }
+  const s = stable(data)
+  let h = 5381
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i)
+  }
+  return (h >>> 0).toString(16)
+}
+
+/**
+ * P1-2：冲突弹窗摘要（条目数 / 总资产）。纯函数，可 Node smoke。
+ * @param {object|null|undefined} data 账本 data 字典
+ * @param {string|null} [updatedAt]
+ */
+export function summarizeLedgerData(data, updatedAt = null) {
+  const d = data != null && typeof data === 'object' ? data : {}
+  let entryCount = 0
+  for (const key of ALL_CLEARABLE_KEYS) {
+    const v = d[key]
+    if (Array.isArray(v)) entryCount += v.length
+    else if (v != null && typeof v === 'object') entryCount += 1
+    else if (v != null) entryCount += 1
+  }
+  const breakdown = calcAssetBreakdown({
+    accounts: Array.isArray(d[STORAGE_KEYS.BANK_ACCOUNTS]) ? d[STORAGE_KEYS.BANK_ACCOUNTS] : [],
+    stocks: Array.isArray(d[STORAGE_KEYS.STOCK_INVESTMENTS]) ? d[STORAGE_KEYS.STOCK_INVESTMENTS] : [],
+    funds: Array.isArray(d[STORAGE_KEYS.FUND_INVESTMENTS]) ? d[STORAGE_KEYS.FUND_INVESTMENTS] : [],
+    lentRecords: Array.isArray(d[STORAGE_KEYS.LENT_MONEY]) ? d[STORAGE_KEYS.LENT_MONEY] : []
+  })
+  return {
+    entryCount,
+    totalAssets: breakdown.totalAssets,
+    updatedAt: updatedAt || null
+  }
+}
+
+/** @returns {object|null} 校验通过的 lastDiscarded 备份 */
+export function getLastDiscardedBackup() {
+  try {
+    const raw = ls().getItem(LAST_DISCARDED_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return isValidBackup(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * P1-2：从 pam-sync-lastDiscarded 恢复被「用云端」覆盖的本机账本。
+ * 冲突解决路径语义：写回本机并置 dirty；若闸门已开则补推。
+ */
+export function restoreLastDiscardedLedger() {
+  const backup = getLastDiscardedBackup()
+  if (!backup) return { ok: false, reason: 'none' }
+  hydrateLocal(backup.data)
+  setDirty()
+  needRepull = false
+  if (pushArmed) {
+    clearTimeout(pushTimer)
+    pushTimer = setTimeout(runPush, DEBOUNCE_MS)
+  }
+  return { ok: true }
+}
+
 // ── dirty：本地存在未上云改动（离线优先的落盘标记）────────────
 function isDirty() {
   return ls().getItem(DIRTY_KEY) != null
@@ -196,23 +331,45 @@ export function serializeLocal() {
   return collectLedgerData((key) => ls().getItem(key)).data
 }
 
-/** 用云 data 覆盖写回本地（先清后写，复用 E1 纯函数） */
+/** 用云 data 覆盖写回本地（先快照，失败回滚；复用 E1 纯函数） */
 export function hydrateLocal(data) {
   if (data == null || typeof data !== 'object') {
     throw new Error('invalid hydrate payload')
   }
+  const incoming = {
+    format: BACKUP_FORMAT,
+    formatVersion: BACKUP_FORMAT_VERSION,
+    app: 'personal-asset-manager',
+    data
+  }
+  if (!isValidBackup(incoming)) {
+    throw new Error('invalid hydrate payload')
+  }
+  // 预序列化：在任何 LS 变更前暴露 stringify 错误，避免半写入
+  for (const [key, value] of Object.entries(data)) {
+    if (!ALL_CLEARABLE_KEYS.includes(key)) continue
+    if (typeof value !== 'string') JSON.stringify(value)
+  }
+  const snapshot = collectLedgerData((key) => ls().getItem(key))
   suppressing = true
   try {
     replaceLedgerData(
-      {
-        format: BACKUP_FORMAT,
-        formatVersion: BACKUP_FORMAT_VERSION,
-        app: 'personal-asset-manager',
-        data
-      },
+      incoming,
       (key) => ls().removeItem(key),
       (key, value) => ls().setItem(key, value)
     )
+  } catch (err) {
+    // P0-4：失败回滚快照，避免残缺本机成为可推权威
+    try {
+      replaceLedgerData(
+        snapshot,
+        (key) => ls().removeItem(key),
+        (key, value) => ls().setItem(key, value)
+      )
+    } catch (rollbackErr) {
+      console.warn('[cloud-sync] hydrate rollback failed:', rollbackErr?.message || rollbackErr)
+    }
+    throw err
   } finally {
     suppressing = false
   }
@@ -326,12 +483,13 @@ async function runPush() {
 
 /**
  * settle：以 KV 为准对齐本地，并按 C1 表开关闸门。
- * @returns {Promise<string>} 结论：in-sync | hydrated | empty-cloud | conflict | offline | auth-expired | hydrate-failed | remote-ahead
+ * @returns {Promise<string>} 结论：in-sync | hydrated | empty-cloud | conflict | offline | auth-expired | hydrate-failed | remote-ahead | identity-blocked | content-anomaly
  */
 export async function settleLedger({ foreground = false } = {}) {
   if (settling) return 'busy'
   settling = true
   let outcome = 'offline'
+  lastEmptyCloudKind = null
   try {
     let remote
     try {
@@ -349,10 +507,21 @@ export async function settleLedger({ foreground = false } = {}) {
     }
 
     if (remote == null) {
-      // empty-cloud：放开闸门；有本机数据则补推（P1-3 身份前置若已有则由其负责）
+      // P1-3：区分从未上云 vs 云端消失；本机有数据 + 404 → 补推（含 version>0 && !dirty）
+      lastEmptyCloudKind =
+        isCloudBound() || getLocalVersion() > 0 ? 'cloud-vanished' : 'never-uploaded'
+
+      if (shouldBlockEmptyCloudCatchUp()) {
+        closePushGate()
+        handlers.onIdentityBlocked?.(lastEmptyCloudKind)
+        outcome = 'identity-blocked'
+        return outcome
+      }
+
       needRepull = false
       openPushGate()
-      if (hasLocalData() && (getLocalVersion() === 0 || isDirty())) {
+      if (hasLocalData()) {
+        setDirty()
         clearTimeout(pushTimer)
         pushTimer = setTimeout(runPush, DEBOUNCE_MS)
       }
@@ -376,7 +545,7 @@ export async function settleLedger({ foreground = false } = {}) {
         outcome = 'remote-ahead'
         return outcome
       }
-      // 冷启动 / 显式 settle：hydrate
+      // 冷启动 / 显式 settle：云优先 hydrate（S2-prime）
       try {
         hydrateLocal(remote.data)
         setLocalVersion(remote.version, remote.updatedAt)
@@ -387,7 +556,7 @@ export async function settleLedger({ foreground = false } = {}) {
         outcome = 'hydrated'
         return outcome
       } catch (hydrateErr) {
-        // P0-4：失败不写 version；禁止推送
+        // P0-4：失败不写 version；禁止推送；不得当离线静默吞掉
         console.warn('[cloud-sync] hydrate failed:', hydrateErr?.message || hydrateErr)
         needRepull = true
         closePushGate()
@@ -410,7 +579,37 @@ export async function settleLedger({ foreground = false } = {}) {
       return outcome
     }
 
-    // 版本相同 —— 仍刷新 bound 时间戳（与 setLocalVersion 同语义：成功对齐）
+    // 版本相同 —— P1-1：指纹不同不得静默跟云；保守保留本机并补推
+    const localData = serializeLocal()
+    const localFp = fingerprintPayload(localData)
+    const remoteFp = fingerprintPayload(remote.data || {})
+    const eitherHasData =
+      Object.keys(localData).length > 0 ||
+      (remote.data != null && typeof remote.data === 'object' && Object.keys(remote.data).length > 0)
+
+    // 已 dirty：正常补推路径（版本对齐下的待推本地），不算「指纹静默跟云」异常
+    if (isDirty()) {
+      setLocalVersion(remote.version, remote.updatedAt)
+      needRepull = false
+      armGateAndCatchUpIfDirty()
+      outcome = 'in-sync'
+      return outcome
+    }
+
+    if (eitherHasData && localFp !== remoteFp) {
+      // 内容异常（无 dirty 却不一致）：绝不 hydrate 跟云；保守推本地
+      needRepull = false
+      openPushGate()
+      setLocalVersion(remote.version, remote.updatedAt)
+      if (Object.keys(localData).length > 0) {
+        setDirty()
+        clearTimeout(pushTimer)
+        pushTimer = setTimeout(runPush, DEBOUNCE_MS)
+      }
+      outcome = 'content-anomaly'
+      return outcome
+    }
+
     setLocalVersion(remote.version, remote.updatedAt)
     needRepull = false
     armGateAndCatchUpIfDirty()
@@ -565,6 +764,7 @@ export function initSync(options = {}) {
     onAuthExpired: null,
     onHydrateFailed: null,
     onSettle: null,
+    onIdentityBlocked: null,
     ...options
   }
   const storage = options.storage || ls()
