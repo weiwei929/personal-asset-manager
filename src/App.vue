@@ -338,13 +338,33 @@
         恢复本机
       </button>
     </div>
-    <!-- P1：回前台发现云端有新数据 → 提示条（点按刷新，不自动 reload 以免打断输入） -->
+    <!-- S5'/M5：回前台 remote-ahead → 轻提示条（点刷新才跟云；不自动 hydrate）
+         pending/dirty/离线等交给 SyncStatusIndicator，避免再叠五条大声横幅 -->
     <div
-      v-if="syncRemoteAhead && !discardedRestoreAvailable"
-      class="fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 cursor-pointer rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
-      @click="refreshForRemoteAhead"
+      v-if="showForegroundRemoteTip"
+      class="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between gap-3 rounded-md border border-sky-200/80 bg-sky-50/95 px-3 py-2 text-sm text-sky-950 shadow-sm backdrop-blur-sm dark:border-sky-800/60 dark:bg-sky-950/90 dark:text-sky-100"
+      role="status"
     >
-      云端有新的账本数据，点击刷新查看
+      <span class="min-w-0 leading-snug">
+        云端有更新（侧栏可见同步状态）。不会自动覆盖本机，需要时再刷新。
+      </span>
+      <div class="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          class="rounded border border-sky-300/80 px-2 py-1 text-xs font-medium hover:bg-sky-100 dark:border-sky-700 dark:hover:bg-sky-900/80"
+          @click="refreshForRemoteAhead"
+        >
+          刷新查看
+        </button>
+        <button
+          type="button"
+          class="rounded px-1.5 py-1 text-xs text-sky-800/70 hover:bg-sky-100 dark:text-sky-200/70 dark:hover:bg-sky-900/80"
+          aria-label="关闭提示"
+          @click="dismissRemoteAheadTip"
+        >
+          关闭
+        </button>
+      </div>
     </div>
 </template>
 
@@ -387,6 +407,7 @@ import {
   restoreLastDiscardedLedger,
   LAST_DISCARDED_KEY
 } from './utils/cloudSync.js'
+import { shouldShowForegroundRemoteTip } from './utils/syncStatus.js'
 
 export default {
   name: 'App',
@@ -415,6 +436,14 @@ export default {
     const discardedRestoreAvailable = ref(false) // P1-2：用云端后可恢复
     const cloudBoundOffline = ref(false) // P0-2(c) 离线绑定门闸
     const hasOpenedBooks = computed(() => openingStore.hasOpenedBooks)
+    // S5'/M5：与冲突条 / 恢复条互斥；pending 等态不另开提示条
+    const showForegroundRemoteTip = computed(() =>
+      shouldShowForegroundRemoteTip({
+        remoteAhead: syncRemoteAhead.value,
+        hasConflict: !!syncConflict.value,
+        hasDiscardRestore: discardedRestoreAvailable.value
+      })
+    )
     // 未建账时默认进向导；已建账进总览（离线绑定门闸开启后由 applySettleOutcome 改道）
     const activeMenu = ref(openingStore.hasOpenedBooks ? 'dashboard' : 'opening-books')
 
@@ -856,7 +885,12 @@ export default {
     }
 
     const refreshForRemoteAhead = () => {
+      // 用户显式确认后再整页刷新合入云端；M5 禁止静默自动跟云
       window.location.reload()
+    }
+
+    const dismissRemoteAheadTip = () => {
+      syncRemoteAhead.value = null
     }
 
     return {
@@ -886,9 +920,11 @@ export default {
       onImportFileChange,
       syncConflict,
       syncRemoteAhead,
+      showForegroundRemoteTip,
       discardedRestoreAvailable,
       formatConflictAmount,
       refreshForRemoteAhead,
+      dismissRemoteAheadTip,
       chooseLocal,
       chooseCloud,
       restoreDiscardedLocal

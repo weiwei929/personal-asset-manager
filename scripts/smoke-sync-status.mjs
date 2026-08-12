@@ -8,7 +8,8 @@ import assert from 'node:assert/strict'
 import {
   SYNC_UI_STATUS,
   mapSyncUiStatus,
-  describeSyncUiStatus
+  describeSyncUiStatus,
+  shouldShowForegroundRemoteTip
 } from '../src/utils/syncStatus.js'
 
 function assertState(flags, expectedId, msg) {
@@ -86,6 +87,28 @@ const authDesc = describeSyncUiStatus(SYNC_UI_STATUS.AUTH_EXPIRED)
 assert.match(authDesc.detail, /登录|重新登录|会话/, '登录过期须有可操作文案（重新登录）')
 assert.equal(authDesc.blocksLocalView, false, '登录过期不得硬挡本机查看')
 
+// ── S5'/M5：回前台 tip 与冲突/恢复条互斥；pending 不另开 tip ──
+assert.equal(
+  shouldShowForegroundRemoteTip({ remoteAhead: { version: 2 }, hasConflict: false, hasDiscardRestore: false }),
+  true,
+  'remote-ahead 且无冲突/恢复条 → 显示轻提示'
+)
+assert.equal(
+  shouldShowForegroundRemoteTip({ remoteAhead: { version: 2 }, hasConflict: true, hasDiscardRestore: false }),
+  false,
+  '有冲突弹窗时不叠 tip'
+)
+assert.equal(
+  shouldShowForegroundRemoteTip({ remoteAhead: { version: 2 }, hasConflict: false, hasDiscardRestore: true }),
+  false,
+  '有恢复本机条时不叠 tip'
+)
+assert.equal(
+  shouldShowForegroundRemoteTip({ remoteAhead: null, hasConflict: false, hasDiscardRestore: false }),
+  false,
+  '无 remote-ahead（仅 pending/dirty 由指示器承担）→ 不显示 tip'
+)
+
 // ── cloudSync 状态 API 与映射接线（独立 mock LS 实例）──
 function createLocalStorage() {
   const store = new Map()
@@ -151,4 +174,4 @@ assert.equal(
   'reset 后 dirty flags → 待推送'
 )
 
-console.log('OK smoke-sync-status: 五态映射 + 优先级 + a11y + cloudSync API 全部通过')
+console.log('OK smoke-sync-status: 五态映射 + 优先级 + a11y + M5 tip + cloudSync API 全部通过')

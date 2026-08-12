@@ -1,5 +1,5 @@
 /**
- * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1' + S2'/M2'+M4' + S4'/M8' + S3/M3）
+ * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'–S5'）
  *
  * 权威限定：settle 时刻以 KV 为准；两次 settle 之间真源仍是本机内存 / localStorage。
  *
@@ -23,6 +23,10 @@
  *
  * S3 / M3：
  * - getSyncStatusFlags / getSyncUiStatus / subscribeSyncStatus（不改 settle/闸门语义）
+ *
+ * S5' / M5：
+ * - 回前台（visibilitychange / pageshow / focus）→ re-settle；remote-ahead **只提示不写存储**
+ * - pending/dirty 等态由 SyncStatusIndicator 承担，不另叠大声横幅
  *
  * 冲突解决路径显式豁免闸门（用户显式决定）。
  */
@@ -831,6 +835,10 @@ function attachLifecycleListeners() {
   lifecycleAttached = true
   target.addEventListener('visibilitychange', () => {
     if (globalThis.document?.visibilityState === 'visible') onForeground()
+  })
+  // S5'/M5：bfcache / 往返缓存恢复也走回前台 re-settle（节流与 focus 共用）
+  target.addEventListener('pageshow', (ev) => {
+    if (ev && ev.persisted) onForeground()
   })
   target.addEventListener('focus', onForeground)
   // C1：online → re-settle，不直接 push

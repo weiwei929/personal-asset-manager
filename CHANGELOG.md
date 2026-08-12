@@ -1,5 +1,19 @@
 # 更新日志 (Changelog)
 
+## [1.8.12] - 2026-08-12
+
+### 云同步 · KV 主存储（v1.08.12 切片收口）
+
+- **S1' / M1'**：推送闸门 + 鉴权后 settle；online/回前台 re-settle；`reloadAllStores`；hydrate 失败禁推；弱网超时
+- **S2' / M2'+M4'**：云优先 hydrate；版本同指纹异不静默跟云；empty-cloud 补推；冲突摘要与覆盖前恢复
+- **S3 / M3**：侧栏同步状态五态指示器（已同步 / 待推送 / 失败 / 离线 / 登录过期）
+- **S4' / M8'**：普通/安全退出清本机账本缓存；`pam-cloud-bound`；idle 只清会话；离线绑定门闸
+- **S5' / M5+M6**：回前台轻提示条（remote-ahead，不自动跟云）；文档对齐 KV 权威；`package.json` → **1.8.12**
+
+权威限定：settle 时刻以 KV 为准；两次 settle 之间仍以本机内存 / localStorage 为真源。
+
+---
+
 ## [0.2.1] - 2025-01-XX
 
 ### 🎨 界面优化

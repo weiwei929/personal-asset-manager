@@ -113,3 +113,21 @@ export function resolveSyncUiStatus(flags) {
   const id = mapSyncUiStatus(flags)
   return describeSyncUiStatus(id)
 }
+
+/**
+ * S5' / M5 · 回前台「云端有更新」提示条是否展示。
+ *
+ * 设计：只对 **remote-ahead**（可点刷新）出一条轻提示；
+ * pending / settling / dirty / offline 等状态交给 SyncStatusIndicator，
+ * 避免再叠五条大声横幅。冲突弹窗与「恢复本机」条优先。
+ * 不做自动跟云（settle foreground 路径也不写存储）。
+ *
+ * @param {{ remoteAhead?: unknown, hasConflict?: boolean, hasDiscardRestore?: boolean }} opts
+ * @returns {boolean}
+ */
+export function shouldShowForegroundRemoteTip(opts = {}) {
+  if (!opts.remoteAhead) return false
+  if (opts.hasConflict) return false
+  if (opts.hasDiscardRestore) return false
+  return true
+}
