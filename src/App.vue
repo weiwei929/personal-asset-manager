@@ -275,19 +275,32 @@
       @click.self="syncConflict = null"
     >
       <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">云端账本有更新</h3>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">账本冲突 · 请二选一</h3>
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          本机和云端都修改过账本（云端更新于
-          {{ new Date(syncConflict.serverUpdatedAt).toLocaleString() }}）。请选择保留哪一份：
+          本机有未上云改动，同时云端也有更新（云端
+          {{ syncConflict.serverUpdatedAt ? new Date(syncConflict.serverUpdatedAt).toLocaleString() : '—' }}）。
+          只能整本保留一份；覆盖前会自动备份将被丢弃的一侧。
+        </p>
+        <div class="mt-4 grid grid-cols-2 gap-3 text-xs text-gray-700 dark:text-gray-200">
+          <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-600">
+            <p class="font-medium text-gray-900 dark:text-gray-100">本机</p>
+            <p class="mt-1">条目 {{ syncConflict.localSummary?.entryCount ?? '…' }}</p>
+            <p>总资产 ¥{{ formatConflictAmount(syncConflict.localSummary?.totalAssets) }}</p>
+            <p class="text-gray-500 dark:text-gray-400">未同步改动</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-600">
+            <p class="font-medium text-gray-900 dark:text-gray-100">云端</p>
+            <p class="mt-1">条目 {{ syncConflict.cloudSummary?.entryCount ?? '…' }}</p>
+            <p>总资产 ¥{{ formatConflictAmount(syncConflict.cloudSummary?.totalAssets) }}</p>
+            <p class="text-gray-500 dark:text-gray-400">
+              {{ syncConflict.serverUpdatedAt ? new Date(syncConflict.serverUpdatedAt).toLocaleString() : '—' }}
+            </p>
+          </div>
+        </div>
+        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          「用本机」会覆盖云端；「用云端」会覆盖本机（可从覆盖前备份恢复）。
         </p>
         <div class="mt-4 flex gap-3">
-          <button
-            type="button"
-            class="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            @click="chooseCloud"
-          >
-            用云端（覆盖本机）
-          </button>
           <button
             type="button"
             class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
@@ -295,12 +308,33 @@
           >
             用本机（覆盖云端）
           </button>
+          <button
+            type="button"
+            class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+            @click="chooseCloud"
+          >
+            用云端（覆盖本机）
+          </button>
         </div>
       </div>
     </div>
+    <!-- P1-2：用云端覆盖后，可从 pam-sync-lastDiscarded 恢复本机账本 -->
+    <div
+      v-if="discardedRestoreAvailable"
+      class="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between gap-3 rounded-lg bg-amber-700 px-4 py-3 text-sm font-medium text-white shadow-lg"
+    >
+      <span>本机账本已被云端覆盖，可恢复覆盖前备份</span>
+      <button
+        type="button"
+        class="shrink-0 rounded border border-white/40 px-2 py-1 text-xs hover:bg-white/10"
+        @click="restoreDiscardedLocal"
+      >
+        恢复本机
+      </button>
+    </div>
     <!-- P1：回前台发现云端有新数据 → 提示条（点按刷新，不自动 reload 以免打断输入） -->
     <div
-      v-if="syncRemoteAhead"
+      v-if="syncRemoteAhead && !discardedRestoreAvailable"
       class="fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 cursor-pointer rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
       @click="refreshForRemoteAhead"
     >
@@ -340,7 +374,11 @@ import {
   resolveConflictUseCloud,
   getRemoteLedger,
   serializeLocal,
-  shouldBlockEmptyLedgerOnboarding
+  shouldBlockEmptyLedgerOnboarding,
+  summarizeLedgerData,
+  getLastDiscardedBackup,
+  restoreLastDiscardedLedger,
+  LAST_DISCARDED_KEY
 } from './utils/cloudSync.js'
 
 export default {
@@ -364,12 +402,36 @@ export default {
     useIdleLogout(isAuthenticated)
 
     const openingStore = useOpeningBalanceStore()    
-    const syncConflict = ref(null) // 云端冲突信息 { serverVersion, serverUpdatedAt }
+    const syncConflict = ref(null) // { serverVersion, serverUpdatedAt, localSummary?, cloudSummary? }
     const syncRemoteAhead = ref(null) // 回前台发现云端更新 { version, updatedAt }（提示条）
+    const discardedRestoreAvailable = ref(false) // P1-2：用云端后可恢复
     const cloudBoundOffline = ref(false) // P0-2(c) 离线绑定门闸
     const hasOpenedBooks = computed(() => openingStore.hasOpenedBooks)
     // 未建账时默认进向导；已建账进总览（离线绑定门闸开启后由 applySettleOutcome 改道）
     const activeMenu = ref(openingStore.hasOpenedBooks ? 'dashboard' : 'opening-books')
+
+    const formatConflictAmount = (n) => {
+      if (n == null || Number.isNaN(Number(n))) return '—'
+      return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    }
+
+    const buildConflictState = async (serverVersion, serverUpdatedAt) => {
+      const localData = serializeLocal()
+      const localSummary = summarizeLedgerData(localData, null)
+      let cloudSummary = null
+      try {
+        const remote = await getRemoteLedger()
+        if (remote?.data) {
+          cloudSummary = summarizeLedgerData(remote.data, remote.updatedAt || serverUpdatedAt)
+        }
+      } catch (e) {
+        console.warn('[cloud-sync] conflict summary fetch failed:', e?.message || e)
+      }
+      if (!cloudSummary) {
+        cloudSummary = { entryCount: null, totalAssets: null, updatedAt: serverUpdatedAt }
+      }
+      return { serverVersion, serverUpdatedAt, localSummary, cloudSummary }
+    }
 
     const applySettleOutcome = (outcome) => {
       const block = shouldBlockEmptyLedgerOnboarding(outcome)
@@ -632,7 +694,18 @@ export default {
       })
       initSync({
         onConflict: (serverVersion, serverUpdatedAt) => {
-          syncConflict.value = { serverVersion, serverUpdatedAt }
+          // 先同权展示弹窗（摘要异步补齐，P1-2：有摘要前按钮同权）
+          syncConflict.value = {
+            serverVersion,
+            serverUpdatedAt,
+            localSummary: summarizeLedgerData(serializeLocal(), null),
+            cloudSummary: null
+          }
+          buildConflictState(serverVersion, serverUpdatedAt).then((state) => {
+            if (syncConflict.value?.serverVersion === serverVersion) {
+              syncConflict.value = state
+            }
+          })
         },
         onHydrated: () => {
           cloudBoundOffline.value = false
@@ -654,6 +727,9 @@ export default {
           closePushGate()
           ElMessage.warning('云同步已断开（登录会话过期），请刷新页面重新登录')
         },
+        onIdentityBlocked: () => {
+          ElMessage.warning('检测到云端身份与本机绑定不一致，已跳过空云补推，请确认账号后重试')
+        },
         onSettle: (outcome) => {
           applySettleOutcome(outcome)
         }
@@ -661,6 +737,8 @@ export default {
       if (isAuthenticated.value) {
         runSettleAfterAuth()
       }
+      // 冷启动：若上次「用云端」留下了可恢复备份，提示入口
+      discardedRestoreAvailable.value = getLastDiscardedBackup() != null
     })
 
     watch(isAuthenticated, (authed, wasAuthed) => {
@@ -688,7 +766,7 @@ export default {
           data
         }
         try {
-          localStorage.setItem('pam-sync-lastDiscarded', JSON.stringify(backup))
+          localStorage.setItem(LAST_DISCARDED_KEY, JSON.stringify(backup))
         } catch (e) {
           console.warn('[sync] 覆盖前备份写 localStorage 失败:', e?.message || e)
         }
@@ -709,7 +787,8 @@ export default {
         const result = await resolveConflictUseLocal(remote ? remote.version : syncConflict.value.serverVersion)
         if (result && result.conflict) {
           // 云端在刚才又被别处更新 → 不谎报成功，重弹窗
-          syncConflict.value = { serverVersion: result.serverVersion, serverUpdatedAt: result.serverUpdatedAt }
+          const state = await buildConflictState(result.serverVersion, result.serverUpdatedAt)
+          syncConflict.value = state
           ElMessage.warning('云端在刚才又有更新，请重新选择')
           return
         }
@@ -720,6 +799,7 @@ export default {
         }
         syncConflict.value = null
         syncRemoteAhead.value = null
+        discardedRestoreAvailable.value = getLastDiscardedBackup() != null
         ElMessage.success('已用本地账本覆盖云端')
       } catch (e) {
         ElMessage.error('操作失败：' + (e?.message || e))
@@ -738,10 +818,32 @@ export default {
           ElMessage.warning('云端暂无数据，已取消')
           return
         }
+        if (result && result.reason === 'hydrate-failed') {
+          ElMessage.error('合入云端失败，本机未覆盖')
+          return
+        }
         syncConflict.value = null
         syncRemoteAhead.value = null
+        discardedRestoreAvailable.value = getLastDiscardedBackup() != null
+        ElMessage.success('已用云端账本覆盖本机；如需恢复，可点底部「恢复本机」')
       } catch (e) {
         ElMessage.error('操作失败：' + (e?.message || e))
+      }
+    }
+
+    const restoreDiscardedLocal = async () => {
+      try {
+        const result = restoreLastDiscardedLedger()
+        if (!result.ok) {
+          ElMessage.warning('没有可恢复的覆盖前备份')
+          discardedRestoreAvailable.value = false
+          return
+        }
+        await reloadAllStores().catch(() => window.location.reload())
+        discardedRestoreAvailable.value = true
+        ElMessage.success('已恢复覆盖前的本机账本（将按同步规则推云）')
+      } catch (e) {
+        ElMessage.error('恢复失败：' + (e?.message || e))
       }
     }
 
@@ -776,9 +878,12 @@ export default {
       onImportFileChange,
       syncConflict,
       syncRemoteAhead,
+      discardedRestoreAvailable,
+      formatConflictAmount,
       refreshForRemoteAhead,
       chooseLocal,
-      chooseCloud
+      chooseCloud,
+      restoreDiscardedLocal
     }
   }
 }

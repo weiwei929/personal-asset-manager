@@ -1,8 +1,9 @@
 /**
- * D6 门闩 · 双标签云同步 smoke（模拟）+ v1.08.12 S1' / S4' 门闩
+ * D6 门闩 · 双标签云同步 smoke（模拟）+ v1.08.12 S1' / S2' / S4' 门闩
  * 用两个独立模块实例模拟「设备 A / 设备 B」+ mock 云端（KV 版乐观锁）：
  *   A 记账 → 防抖推云 → B 启动拉云拿到数据 → 冲突 409 → 用本地/用云端解决
  * S1'：settle 前不抢跑 PUT；hydrate 失败禁推；online → re-settle
+ * S2'：云优先 hydrate；dirty 不跟云；无指纹静默跟云；empty-cloud 补推；hydrate 回滚；冲突备份恢复
  * S4'：pam-cloud-bound 写入；普通/安全退出分路；resetSyncState 保留 bound；idle 源码门闩
  * 运行：node scripts/smoke-cloud-sync.mjs
  */
@@ -392,4 +393,241 @@ devE.resetSyncState()
 devF.resetSyncState()
 devS4.resetSyncState()
 
-console.log('\nOK cloud-sync smoke: 全部通过（含 S1\' 闸门 / S4\' bound·退出分路 / hydrate 失败禁推 / fetch 超时）')
+// ═══════════════ S2' / M2'+M4'：云优先 / dirty 不跟云 / 指纹 / empty-cloud / 原子性 / 备份恢复 ═══════════════
+
+cloudKV.clear()
+putCount = 0
+online = true
+hangGet = false
+
+// S2-prime：云优先灌入（无 dirty）
+cloudKV.set(EMAIL_KEY, JSON.stringify({
+  version: 3,
+  updatedAt: '2026-08-12T10:00:00.000Z',
+  data: { 'pam-bank-accounts': [{ id: 1, bank: '云端银行', demandBalance: 5000 }] }
+}))
+const lsS2a = createLocalStorage()
+globalThis.localStorage = lsS2a
+// 旧缓存、version 落后、无 dirty
+lsS2a.setItem('pam-bank-accounts', JSON.stringify([{ id: 9, bank: '旧缓存', demandBalance: 1 }]))
+lsS2a.setItem('pam-sync-meta', JSON.stringify({ version: 1, updatedAt: '2020-01-01' }))
+const devS2a = await import('../src/utils/cloudSync.js?browser=S2a')
+devS2a.initSync({})
+const s2Hydrate = await devS2a.settleLedger()
+assert.equal(s2Hydrate, 'hydrated', 'S2-prime：无 dirty 应云优先 hydrated')
+assert.deepEqual(
+  JSON.parse(lsS2a.getItem('pam-bank-accounts')),
+  [{ id: 1, bank: '云端银行', demandBalance: 5000 }]
+)
+assert.equal(devS2a.getLocalVersion(), 3)
+console.log('✓ S2\' 云优先灌入（无 dirty → hydrated）')
+
+// S2-prime：dirty 时不跟云 → conflict
+const lsS2b = createLocalStorage()
+globalThis.localStorage = lsS2b
+let s2Conflict = null
+lsS2b.setItem('pam-bank-accounts', JSON.stringify([{ id: 2, bank: '本机脏数据', demandBalance: 99 }]))
+lsS2b.setItem('pam-sync-meta', JSON.stringify({ version: 1, updatedAt: '2020-01-01' }))
+lsS2b.setItem('pam-sync-dirty', '1')
+const devS2b = await import('../src/utils/cloudSync.js?browser=S2b')
+devS2b.initSync({ onConflict: (sv, sa) => { s2Conflict = { sv, sa } } })
+const s2ConflictOutcome = await devS2b.settleLedger()
+assert.equal(s2ConflictOutcome, 'conflict', 'S2-prime：dirty + 云更新 → conflict')
+assert.ok(s2Conflict, '应回调 onConflict')
+assert.deepEqual(
+  JSON.parse(lsS2b.getItem('pam-bank-accounts')),
+  [{ id: 2, bank: '本机脏数据', demandBalance: 99 }],
+  'dirty 时不得静默 hydrate 跟云'
+)
+assert.equal(devS2b.isPushArmed(), false, 'conflict 闸门关闭')
+console.log('✓ S2\' dirty 时不跟云（conflict，本机保留）')
+
+// P1-1：版本相同仅指纹不同 → 不静默跟云（content-anomaly / 保守本机）
+cloudKV.set(EMAIL_KEY, JSON.stringify({
+  version: 7,
+  updatedAt: '2026-08-12T11:00:00.000Z',
+  data: { 'pam-bank-accounts': [{ id: 1, bank: '云端副本', demandBalance: 100 }] }
+}))
+const lsS2c = createLocalStorage()
+globalThis.localStorage = lsS2c
+lsS2c.setItem('pam-bank-accounts', JSON.stringify([{ id: 1, bank: '本机副本', demandBalance: 200 }]))
+lsS2c.setItem('pam-sync-meta', JSON.stringify({ version: 7, updatedAt: '2026-08-12T10:00:00.000Z' }))
+// 故意不置 dirty（模拟未标记的本地写入）
+const putsBeforeFp = putCount
+const devS2c = await import('../src/utils/cloudSync.js?browser=S2c')
+devS2c.initSync({})
+assert.notEqual(
+  devS2c.fingerprintPayload(JSON.parse(lsS2c.getItem('pam-bank-accounts')) ? { 'pam-bank-accounts': JSON.parse(lsS2c.getItem('pam-bank-accounts')) } : {}),
+  devS2c.fingerprintPayload({ 'pam-bank-accounts': [{ id: 1, bank: '云端副本', demandBalance: 100 }] }),
+  '指纹应不同'
+)
+const s2Fp = await devS2c.settleLedger()
+assert.equal(s2Fp, 'content-anomaly', '同版本指纹不同 → content-anomaly')
+assert.deepEqual(
+  JSON.parse(lsS2c.getItem('pam-bank-accounts')),
+  [{ id: 1, bank: '本机副本', demandBalance: 200 }],
+  '不得静默跟云覆盖本机'
+)
+assert.equal(devS2c.getLocalVersion(), 7, '版本保持对齐但不 hydrate')
+await sleep(2600)
+assert.ok(putCount > putsBeforeFp, '保守路径应补推本机')
+cloud = JSON.parse(cloudKV.get(EMAIL_KEY))
+assert.deepEqual(cloud.data['pam-bank-accounts'], [{ id: 1, bank: '本机副本', demandBalance: 200 }])
+console.log('✓ S2\' P1-1 同版本指纹不同不静默跟云，保守补推本机')
+
+// P1-3：云端消失（version>0、!dirty、404）→ 补推
+cloudKV.clear()
+putCount = 0
+const lsS2d = createLocalStorage()
+globalThis.localStorage = lsS2d
+lsS2d.setItem('pam-bank-accounts', JSON.stringify([{ id: 3, bank: '仅存副本', demandBalance: 777 }]))
+lsS2d.setItem('pam-sync-meta', JSON.stringify({ version: 4, updatedAt: '2026-08-01T00:00:00.000Z' }))
+lsS2d.setItem('pam-cloud-bound', JSON.stringify({ lastVersion: 4, lastSyncedAt: '2026-08-01T00:00:00.000Z' }))
+// 无 dirty
+assert.equal(lsS2d.getItem('pam-sync-dirty'), null)
+const devS2d = await import('../src/utils/cloudSync.js?browser=S2d')
+devS2d.initSync({})
+const s2Empty = await devS2d.settleLedger()
+assert.equal(s2Empty, 'empty-cloud', '云 404 → empty-cloud')
+assert.equal(devS2d.getLastEmptyCloudKind(), 'cloud-vanished', '应识别为云端消失')
+assert.equal(devS2d.isPushArmed(), true)
+await sleep(2600)
+assert.ok(cloudKV.has(EMAIL_KEY), '云端消失后应补推仅存副本')
+cloud = JSON.parse(cloudKV.get(EMAIL_KEY))
+assert.deepEqual(cloud.data['pam-bank-accounts'], [{ id: 3, bank: '仅存副本', demandBalance: 777 }])
+console.log('✓ S2\' P1-3 empty-cloud（云端消失）补推')
+
+// P1-3：从未上云分类
+cloudKV.clear()
+putCount = 0
+const lsS2e = createLocalStorage()
+globalThis.localStorage = lsS2e
+lsS2e.setItem('pam-bank-accounts', JSON.stringify([{ id: 4, bank: '首次', demandBalance: 1 }]))
+const devS2e = await import('../src/utils/cloudSync.js?browser=S2e')
+devS2e.initSync({})
+const s2Never = await devS2e.settleLedger()
+assert.equal(s2Never, 'empty-cloud')
+assert.equal(devS2e.getLastEmptyCloudKind(), 'never-uploaded')
+await sleep(2600)
+assert.ok(cloudKV.has(EMAIL_KEY), '从未上云也应补推')
+console.log('✓ S2\' P1-3 empty-cloud（从未上云）补推')
+
+// P1-3：身份明确冲突 → 不补推
+cloudKV.clear()
+putCount = 0
+const lsS2id = createLocalStorage()
+globalThis.localStorage = lsS2id
+lsS2id.setItem('pam-bank-accounts', JSON.stringify([{ id: 5, bank: '旧身份账本', demandBalance: 1 }]))
+lsS2id.setItem('pam-cloud-bound', JSON.stringify({
+  lastVersion: 2,
+  lastSyncedAt: '2026-08-01T00:00:00.000Z',
+  emailHash: 'hash-old'
+}))
+const devS2id = await import('../src/utils/cloudSync.js?browser=S2id')
+devS2id.setIdentityHashGetter(() => 'hash-new')
+devS2id.initSync({})
+const s2Blocked = await devS2id.settleLedger()
+assert.equal(s2Blocked, 'identity-blocked', '身份冲突应拦截')
+assert.equal(devS2id.isPushArmed(), false)
+await sleep(2600)
+assert.equal(putCount, 0, '身份冲突不得补推')
+devS2id.setIdentityHashGetter(null)
+console.log('✓ S2\' P1-3 身份明确冲突时 empty-cloud 不补推')
+
+// P0-4：hydrate 中途失败 → 回滚本机、不写 version
+cloudKV.clear()
+const lsS2h = createLocalStorage()
+globalThis.localStorage = lsS2h
+lsS2h.setItem('pam-bank-accounts', JSON.stringify([{ id: 1, bank: '应回滚', demandBalance: 42 }]))
+lsS2h.setItem('pam-sync-meta', JSON.stringify({ version: 1, updatedAt: '2020-01-01' }))
+const originalData = lsS2h.getItem('pam-bank-accounts')
+const putsBeforeAtomic = putCount
+let setCount = 0
+const rawSet = lsS2h.setItem
+lsS2h.setItem = (k, v) => {
+  // hydrate 写入业务键时制造中途失败（跳过 sync-meta / dirty / bound）
+  if (k === 'pam-bank-accounts' && setCount >= 0) {
+    const cloudRaw = cloudKV.get(EMAIL_KEY)
+    if (cloudRaw && JSON.parse(cloudRaw).version === 50) {
+      setCount++
+      if (setCount === 1) throw new Error('simulated mid-hydrate failure')
+    }
+  }
+  return rawSet(k, v)
+}
+cloudKV.set(EMAIL_KEY, JSON.stringify({
+  version: 50,
+  updatedAt: new Date().toISOString(),
+  data: {
+    'pam-bank-accounts': [{ id: 99, bank: '云端新', demandBalance: 1 }],
+    'pam-bank-movements': [{ id: 1, desc: '第二键' }]
+  }
+}))
+const devS2h = await import('../src/utils/cloudSync.js?browser=S2h')
+let hydrateFailCb = false
+devS2h.initSync({ onHydrateFailed: () => { hydrateFailCb = true } })
+const s2Atomic = await devS2h.settleLedger()
+lsS2h.setItem = rawSet
+assert.equal(s2Atomic, 'hydrate-failed', '中途失败 → hydrate-failed')
+assert.equal(hydrateFailCb, true)
+assert.equal(devS2h.getLocalVersion(), 1, '失败不得推进 version')
+assert.equal(devS2h.isNeedRepull(), true)
+assert.equal(devS2h.isPushArmed(), false)
+assert.equal(lsS2h.getItem('pam-bank-accounts'), originalData, '失败应回滚本机账本')
+lsS2h.setItem('pam-bank-movements', JSON.stringify([{ id: 8 }]))
+await sleep(2600)
+assert.equal(putCount, putsBeforeAtomic, 'hydrate 失败期间禁推')
+console.log('✓ S2\' P0-4 hydrate 失败回滚且不写 version、禁推')
+
+// P1-2：冲突备份 + restoreLastDiscardedLedger
+cloudKV.clear()
+putCount = 0
+const lsS2r = createLocalStorage()
+globalThis.localStorage = lsS2r
+const {
+  BACKUP_FORMAT: BF,
+  BACKUP_FORMAT_VERSION: BFV
+} = await import('../src/utils/ledgerBackup.js?browser=S2rBackup')
+const discardedLocal = {
+  format: BF,
+  formatVersion: BFV,
+  app: 'personal-asset-manager',
+  exportedAt: new Date().toISOString(),
+  note: '用云端覆盖前·本机账本',
+  data: { 'pam-bank-accounts': [{ id: 7, bank: '被覆盖本机', demandBalance: 1234 }] }
+}
+lsS2r.setItem('pam-sync-lastDiscarded', JSON.stringify(discardedLocal))
+lsS2r.setItem('pam-bank-accounts', JSON.stringify([{ id: 1, bank: '已用云端', demandBalance: 0 }]))
+lsS2r.setItem('pam-sync-meta', JSON.stringify({ version: 2, updatedAt: '2026-08-12T12:00:00.000Z' }))
+cloudKV.set(EMAIL_KEY, JSON.stringify({
+  version: 2,
+  updatedAt: '2026-08-12T12:00:00.000Z',
+  data: { 'pam-bank-accounts': [{ id: 1, bank: '已用云端', demandBalance: 0 }] }
+}))
+const devS2r = await import('../src/utils/cloudSync.js?browser=S2r')
+devS2r.initSync({})
+await devS2r.settleLedger()
+assert.ok(devS2r.getLastDiscardedBackup(), '应能读到 lastDiscarded')
+const summary = devS2r.summarizeLedgerData(discardedLocal.data)
+assert.equal(summary.entryCount, 1)
+assert.equal(summary.totalAssets, 1234)
+const restored = devS2r.restoreLastDiscardedLedger()
+assert.equal(restored.ok, true)
+assert.deepEqual(
+  JSON.parse(lsS2r.getItem('pam-bank-accounts')),
+  [{ id: 7, bank: '被覆盖本机', demandBalance: 1234 }],
+  '恢复后本机应为覆盖前账本'
+)
+assert.ok(lsS2r.getItem('pam-sync-dirty') != null, '恢复后应置 dirty')
+console.log('✓ S2\' P1-2 冲突摘要 + lastDiscarded 恢复')
+
+devS2a.resetSyncState()
+devS2b.resetSyncState()
+devS2c.resetSyncState()
+devS2d.resetSyncState()
+devS2e.resetSyncState()
+devS2id.resetSyncState()
+devS2h.resetSyncState()
+devS2r.resetSyncState()
+
+console.log('\nOK cloud-sync smoke: 全部通过（含 S1\' 闸门 / S2\' 云优先·指纹·empty-cloud·原子性·恢复 / S4\' bound·退出分路）')
