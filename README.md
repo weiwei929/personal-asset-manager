@@ -2,6 +2,7 @@
 
 > **方向声明（2026-08）**  
 > 本应用定位为**轻量个人账本**（记录 + 呈现 + 轻引导），**不是**大而全财务系统 / 自动化中台。  
+> - **当前版本** → `1.8.12`（规划号 v1.08.12）：联网 settle 以 **Cloudflare KV** 为准，localStorage 为运行期缓冲（见 [PLAN](./docs/PLAN-v1.08.12-KV主存储.md)、[CLOUDFLARE](./docs/CLOUDFLARE.md)）  
 > - **当前基线** → [docs/BASELINE-2026-08-05.md](./docs/BASELINE-2026-08-05.md)（一期主路径手测通过 · D1–D4）  
 > - **钱怎么算** → 营地笔记 [框架定稿](../projects/personal-asset-manager/notes/2026-07-20-框架定稿-确认点.md)  
 > - **做什么/不做什么** → [会诊决议](../projects/personal-asset-manager/notes/2026-08-04-会诊决议-健壮与习惯指引.md)  
@@ -185,6 +186,6 @@ personal-asset-manager/
 ---
 
 **开发时间**: 2025年9月8日-9日  
-**版本**: v0.2.0  
-**最后更新**: 2025年9月9日
+**版本**: 1.8.12  
+**最后更新**: 2026年8月12日
 

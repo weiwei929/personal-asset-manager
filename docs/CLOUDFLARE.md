@@ -1,24 +1,24 @@
 # Cloudflare Pages 部署指南
 
-本应用为 **纯前端 Vue SPA**，数据与登录凭证均在浏览器本地存储，**无需后端**。适合部署到 Cloudflare Pages。
+本应用为 **Vue SPA + Cloudflare Pages Functions**。自 **v1.08.12** 起，联网且鉴权有效时以 **Cloudflare KV 为 settle 权威**；浏览器 localStorage / 内存为运行期缓冲与离线写缓存（不是「仅本机、无云」）。
 
 ---
 
-## 1. 架构与数据落点
+## 1. 架构与数据落点（v1.08.12 · KV 主存储）
 
 | 位置 | 内容 |
 |------|------|
 | Cloudflare Pages | 静态 HTML/JS/CSS（应用壳） |
-| 浏览器 localStorage | 账本业务数据 + 登录密码哈希 |
+| Pages Functions + KV | `/api/ledger`；键 `ledger:{email}`；Access JWT |
+| 浏览器 localStorage | 运行期缓冲 + 离线写；口令哈希 / 主题 / `pam-cloud-bound` 等 |
 | 浏览器 sessionStorage | 当前是否已登录（关标签页失效） |
 
-**含义：**
+**权威限定（与 `docs/PLAN-v1.08.12-KV主存储.md` 一致）：**
 
-- 打开同一 Cloudflare 网址 ≠ 自动同步账本  
-- 账本只在**你用过并登录过的那台设备的浏览器**里  
-- 换设备 = 空账本，需重新建账（或自行备份/迁移 localStorage，二期可做导出）
-
-数据量极小，**现阶段不必上后端**。
+- **settle 时刻**以 KV 为准；两次 settle 之间真源仍是本机内存与 localStorage  
+- 有未上云改动（dirty）且云端更新 → **冲突二选一**，禁止静默覆盖  
+- **回前台**只做 re-settle + 轻提示条（remote-ahead），**不自动跟云**；pending/离线等看侧栏同步状态指示器  
+- 换设备：登录 Access 后 settle 可从云端 hydrate；退出清本机缓存后联网再进亦可拉回  
 
 ---
 
@@ -199,6 +199,8 @@ Pages 项目 → **Custom domains** → 按提示绑定域名（自动 HTTPS）�
 | 安全退出（清 bound + Access） | `src/utils/dataReset.js` → `wipeLedgerClearCloudBound` / `showSecureLogoutDialog` |
 | 云端绑定标记 | `src/constants/storageKeys.js` · `cloudSync.setLocalVersion` / `pam-cloud-bound` |
 | 业务数据键 | `src/constants/storageKeys.js`（`ALL_CLEARABLE_KEYS` 不含 `pam-auth` / `pam-cloud-bound`） |
+| 同步层 / settle | `src/utils/cloudSync.js` |
+| 同步状态五态 UI | `src/components/SyncStatusIndicator.vue` · `src/utils/syncStatus.js` |
 
 ---
 
@@ -208,3 +210,4 @@ Pages 项目 → **Custom domains** → 按提示绑定域名（自动 HTTPS）�
 |------|------|
 | 2026-07-20 | 初版：Pages 部署 + 闲置退出 + 安全退出清账本说明 |
 | 2026-08-12 | S4'/M8'：普通/安全退出都清本机账本缓存；bound 分路；idle 例外；离线绑定门闸 |
+| 2026-08-12 | S5'/M6：§1 改为 KV settle 权威说明；版本 `1.8.12`；回前台提示条不自动跟云 |
