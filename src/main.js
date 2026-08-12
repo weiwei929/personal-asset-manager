@@ -13,6 +13,7 @@ import { useFundInvestmentStore } from './stores/fundInvestment.js'
 import { useLentMoneyStore } from './stores/lentMoney.js'
 import { useMonthlyStatementsStore } from './stores/monthlyStatements.js'
 import { useAuthStore } from './stores/auth.js'
+import { installLocalStoragePatch } from './utils/cloudSync.js'
 
 // 导入数据重置工具（确保控制台命令可用）
 import './utils/dataReset.js'
@@ -22,6 +23,9 @@ const pinia = createPinia()
 
 app.use(pinia)
 app.use(ElementPlus)
+
+// P0-1 方案 A：尽早安装 LS patch（闸门默认关闭，只累积 dirty、不 PUT）
+installLocalStoragePatch()
 
 // 主题 + 登录态
 const themeStore = useThemeStore()
@@ -45,7 +49,7 @@ stockStore.loadFromLocalStorage()
 fundInvestStore.loadFromLocalStorage()
 lentMoneyStore.loadFromLocalStorage()
 monthlyStatementsStore.loadFromLocalStorage()
-// 进入新自然月后补齐「上月」只读账单（不改当前账）
+// 进入新自然月后补齐「上月」只读账单（不改当前账）；patch 已装、闸门关闭 → 可置 dirty
 monthlyStatementsStore.ensureCatchUp()
 
 app.mount('#app')

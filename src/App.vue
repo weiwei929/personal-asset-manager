@@ -283,7 +283,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import Dashboard from './components/Dashboard.vue'
@@ -305,7 +305,16 @@ import {
   copyDiagLogs,
   diagLog
 } from './utils/diagnostics.js'
-import { initSync, resolveConflictUseLocal, resolveConflictUseCloud, getRemoteLedger, serializeLocal } from './utils/cloudSync.js'
+import {
+  initSync,
+  settleLedger,
+  reloadAllStores,
+  closePushGate,
+  resolveConflictUseLocal,
+  resolveConflictUseCloud,
+  getRemoteLedger,
+  serializeLocal
+} from './utils/cloudSync.js'
 
 export default {
   name: 'App',
@@ -333,6 +342,7 @@ export default {
 
     const logout = () => {
       authStore.logout()
+      closePushGate() // 内存闸门关闭；不清 pam-cloud-bound（S4'）
       diagLog('logout')
       ElMessage.success('已退出登录（账本仍保留在本机）')
     }
@@ -532,6 +542,13 @@ export default {
       windowWidth.value = window.innerWidth
     }
 
+    /** P0-1：仅在 LoginGate 通过后 settle；门闸 UI 亦在该边界内 */
+    const runSettleAfterAuth = () => {
+      settleLedger().catch((e) => {
+        console.warn('[cloud-sync] settle after auth failed:', e?.message || e)
+      })
+    }
+
     onMounted(() => {
       window.addEventListener('resize', handleResize)
       if (!openingStore.hasOpenedBooks) {
@@ -547,16 +564,35 @@ export default {
         },
         onHydrated: () => {
           ElMessage.success('已从云端同步最新账本')
-          window.location.reload()
+          // P0-3：优先重灌 Pinia，整页 reload 仅作兜底
+          reloadAllStores().catch((e) => {
+            console.warn('[cloud-sync] reloadAllStores failed, fallback reload:', e?.message || e)
+            window.location.reload()
+          })
+        },
+        onHydrateFailed: () => {
+          ElMessage.error('云端账本合入失败，请检查网络后重试（已禁止推送以防覆盖云端）')
         },
         onRemoteAhead: (version, updatedAt) => {
-          if (syncRemoteAhead.value) return // 已展示则不重复提示
+          if (syncRemoteAhead.value) return
           syncRemoteAhead.value = { version, updatedAt }
         },
         onAuthExpired: () => {
+          closePushGate()
           ElMessage.warning('云同步已断开（登录会话过期），请刷新页面重新登录')
         }
       })
+      if (isAuthenticated.value) {
+        runSettleAfterAuth()
+      }
+    })
+
+    watch(isAuthenticated, (authed, wasAuthed) => {
+      if (authed && !wasAuthed) {
+        runSettleAfterAuth()
+      } else if (!authed) {
+        closePushGate()
+      }
     })
 
     onUnmounted(() => {
