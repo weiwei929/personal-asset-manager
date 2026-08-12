@@ -3,98 +3,41 @@
  * 清除业务账本 localStorage；执行前须校验登录密码。
  * 键表真源：constants/storageKeys.js（ALL_CLEARABLE_KEYS）
  * 保留：AUTH、THEME、session 登录标记
+ *
+ * S4' / M8'：普通退出与安全退出都清本机账本缓存；对 pam-cloud-bound 的处理必须分路，
+ * 不得做成「同一函数同清同留」。
  */
 
 import {
   ALL_CLEARABLE_KEYS,
-  STORAGE_KEYS,
   PRESERVED_ON_RESET_KEYS
 } from '../constants/storageKeys.js'
 import { useAuthStore } from '../stores/auth.js'
-import { resetSyncState } from './cloudSync.js'
+import {
+  wipeLedgerKeepCloudBound,
+  wipeLedgerClearCloudBound,
+  clearLedgerBusinessKeys
+} from './ledgerWipe.js'
+
+export { wipeLedgerKeepCloudBound, wipeLedgerClearCloudBound }
 
 /** 与 ALL_CLEARABLE_KEYS 一致，勿在本文件另列魔法字符串 */
 const CLEARABLE_KEYS = [...ALL_CLEARABLE_KEYS]
 
-// 默认分类数据（重置后写回，避免空键）
-const DEFAULT_CATEGORIES = [
-  {
-    id: "1",
-    name: "工资收入",
-    type: "income",
-    color: "#67C23A"
-  },
-  {
-    id: "2", 
-    name: "投资收益",
-    type: "income",
-    color: "#E6A23C"
-  },
-  {
-    id: "3",
-    name: "其他收入", 
-    type: "income",
-    color: "#909399"
-  },
-  {
-    id: "4",
-    name: "餐饮",
-    type: "expense",
-    color: "#F56C6C"
-  },
-  {
-    id: "5",
-    name: "交通",
-    type: "expense", 
-    color: "#409EFF"
-  },
-  {
-    id: "6",
-    name: "购物",
-    type: "expense",
-    color: "#C71585"
-  },
-  {
-    id: "7",
-    name: "娱乐",
-    type: "expense",
-    color: "#FF7F50"
-  },
-  {
-    id: "8",
-    name: "其他支出",
-    type: "expense",
-    color: "#909399"
-  }
-]
-
 /**
- * 清除业务账本数据（保留登录密码与主题偏好）
+ * 清除业务账本数据（保留登录密码与主题偏好，以及 pam-cloud-bound）
+ * 开发「重置数据」与普通退出清缓存共用此路径（bound 保留）。
  */
 export function clearAllData() {
   try {
-    CLEARABLE_KEYS.forEach(key => {
-      localStorage.removeItem(key)
-    })
-    // 分类：清除后写回默认（仍属业务键，不在 PRESERVED 内）
-    localStorage.setItem(
-      STORAGE_KEYS.FINANCE_CATEGORIES,
-      JSON.stringify(DEFAULT_CATEGORIES)
-    )
-
-    // 重置语义 A：同步状态一并归零（清版本号 + dirty + 取消待推/待重试定时器）。
-    // 必须排在上面的 removeItem 循环与分类 setItem 之后——那些写操作会经 patch 过的
-    // localStorage 置 dirty 并排上防抖推送，先清会被它们重新点亮。
-    // 效果：重置只影响本机；云端账本保留，下次启动会重新同步回来。
-    resetSyncState()
-
+    const result = clearLedgerBusinessKeys()
     // eslint-disable-next-line no-console
     console.log(
       '✅ 业务数据已清除（保留:',
       PRESERVED_ON_RESET_KEYS.join(', '),
       '）'
     )
-    return { success: true, message: '数据重置成功' }
+    return { success: true, message: '数据重置成功', ...result }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('❌ 数据重置失败:', error)
@@ -103,7 +46,7 @@ export function clearAllData() {
 }
 
 /**
- * 安全退出：校验登录密码 → 清账本 → 退出会话
+ * 安全退出：校验登录密码 → 清账本 + 清绑定标记 → 退出会话
  * @param {string} password
  * @returns {Promise<{ success: boolean, message: string }>}
  */
@@ -113,12 +56,12 @@ export async function secureLogoutAndWipe(password) {
   if (!ok) {
     return { success: false, message: '登录密码错误，未清除数据' }
   }
-  const result = clearAllData()
+  const result = wipeLedgerClearCloudBound()
   if (!result.success) return result
   auth.logout()
   return {
     success: true,
-    message: '本机账本已清除，已退出登录（登录密码仍保留，可重新登录后建账）'
+    message: '本机账本与绑定标记已清除，已退出登录（登录密码仍保留）'
   }
 }
 
@@ -131,16 +74,19 @@ export function showSecureLogoutDialog(onSuccess) {
     const { overlay, dialog } = createOverlayDialog(`
       <div style="display: flex; align-items: center; margin-bottom: 16px;">
         <span style="font-size: 24px; margin-right: 12px;">🛡️</span>
-        <h3 style="margin: 0; color: #e6a23c;">安全退出并清除本机账本</h3>
+        <h3 style="margin: 0; color: #e6a23c;">安全退出</h3>
       </div>
       <p style="margin: 0 0 16px; color: #666; line-height: 1.55; font-size: 14px;">
         适用于<strong>公共电脑 / 借出设备</strong>离开前：<br><br>
         • 清除本机账本业务数据（银行、收支、投资、借贷等）<br>
+        • 清除本机「曾绑过云端」标记（pam-cloud-bound）<br>
         • 退出当前登录会话<br>
         • 结束 Cloudflare 登录（Access 会话一并退出，防止下一个人把云端账本拉回本机）<br>
-        • <strong>保留</strong>登录密码（回到本机后可重新登录并建账）<br><br>
-        与「退出登录」不同：退出登录<strong>不删</strong>账本。<br>
-        云端账本<strong>保留</strong>：重新登录后会自动同步回来（如需彻底清除云端，
+        • <strong>保留</strong>登录密码与主题偏好<br><br>
+        与「退出登录」的差别：两者都清本机账本缓存且<strong>不删云端</strong>；
+        普通退出会<strong>保留</strong>云端绑定标记（离线时可提示「账本在云端」），
+        安全退出会<strong>清除</strong>该标记并结束 Access。<br>
+        云端账本<strong>保留</strong>：用自己的设备重新登录后会自动同步回来（如需彻底清除云端，
         请先导出备份，再到 Cloudflare 控制台删除）。<br>
         <strong style="color: #f56c6c;">本机数据清除后不可撤销！</strong>
       </p>

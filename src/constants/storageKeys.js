@@ -38,10 +38,11 @@ export const STORAGE_KEYS = Object.freeze({
   /** 主题偏好（非账本；重置账本时保留） */
   THEME: 'theme-settings',
   /**
-   * 曾绑定云端账本的轻量标记（B2 / P0-2(c)）
-   * 值建议 { lastVersion, lastSyncedAt }，可选 email 哈希；不含账本正文。
-   * 写入时机与普通/安全退出差异 → S4'（C2）；本常量仅登记归属。
-   * 不进 ALL_CLEARABLE_KEYS / 同步 payload / dirty 白名单；resetSyncState 不得清除。
+   * 曾绑定云端账本的轻量标记（B2 / P0-2(c) / S4'）
+   * 值：{ lastVersion, lastSyncedAt }，可选 emailHash；不含账本正文。
+   * 写入：与 setLocalVersion 同处（每次成功 settle / 成功 PUT）。
+   * 普通退出保留；安全退出清除；resetSyncState 不得清除（C2）。
+   * 不进 ALL_CLEARABLE_KEYS / 同步 payload / dirty 白名单。
    */
   CLOUD_BOUND: 'pam-cloud-bound'
 })

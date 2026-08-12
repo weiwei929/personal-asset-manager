@@ -83,7 +83,7 @@
             @click="secureLogout"
           >
             <LineIcon name="trash" :size="18" class-name="mr-2.5 opacity-80" />
-            <span class="text-sm">安全退出清账本</span>
+            <span class="text-sm">安全退出</span>
           </button>
           <button
             v-if="isDevelopment"
@@ -200,7 +200,7 @@
                      !text-amber-700 dark:!text-amber-400/90"
               @click="showMobileMenu = false; secureLogout()"
             >
-              <span class="text-sm">安全退出清账本</span>
+              <span class="text-sm">安全退出</span>
             </button>
           </nav>
         </aside>
@@ -211,9 +211,23 @@
               <h1 class="text-lg font-semibold tracking-tight">{{ getCurrentPageTitle() }}</h1>
             </header>
 
-            <!-- 未建账提示（非建账页时） -->
+            <!-- P0-2(c)：离线 + 曾绑定云端 + 无期初 → 禁止建账引导 -->
             <div
-              v-if="!hasOpenedBooks && activeMenu !== 'opening-books'"
+              v-if="cloudBoundOffline"
+              class="mb-6 rounded-xl border border-sky-200 dark:border-sky-900/50
+                     bg-sky-50 dark:bg-sky-950/30 px-4 py-3"
+            >
+              <p class="text-sm text-sky-900 dark:text-sky-200">
+                账本在云端，当前离线，请联网后进入
+              </p>
+              <p class="mt-1 text-xs text-sky-800/80 dark:text-sky-300/80">
+                本机无缓存账本；联网后会自动从云端同步，请勿在此新建空账本。
+              </p>
+            </div>
+
+            <!-- 未建账提示（非建账页时；离线绑定门闸开启时不展示建账引导） -->
+            <div
+              v-else-if="!hasOpenedBooks && activeMenu !== 'opening-books'"
               class="mb-6 rounded-xl border border-amber-200 dark:border-amber-900/50
                      bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex flex-wrap items-center justify-between gap-3"
             >
@@ -229,8 +243,20 @@
               </button>
             </div>
 
+            <div
+              v-if="cloudBoundOffline && activeMenu === 'opening-books'"
+              class="rounded-xl border border-sky-200 dark:border-sky-900/50
+                     bg-sky-50 dark:bg-sky-950/30 px-4 py-8 text-center"
+            >
+              <p class="text-sm text-sky-900 dark:text-sky-200">
+                账本在云端，当前离线，请联网后进入
+              </p>
+              <p class="mt-2 text-xs text-sky-800/80 dark:text-sky-300/80">
+                已禁止空账本 / 建账引导，避免离线新建覆盖云端真账本。
+              </p>
+            </div>
             <OpeningBooks
-              v-if="activeMenu === 'opening-books'"
+              v-else-if="activeMenu === 'opening-books'"
               @done="onOpeningDone"
             />
             <Dashboard v-else-if="activeMenu === 'dashboard'" @openDialog="handleOpenDialog" />
@@ -313,7 +339,8 @@ import {
   resolveConflictUseLocal,
   resolveConflictUseCloud,
   getRemoteLedger,
-  serializeLocal
+  serializeLocal,
+  shouldBlockEmptyLedgerOnboarding
 } from './utils/cloudSync.js'
 
 export default {
@@ -333,26 +360,55 @@ export default {
     const authStore = useAuthStore()
     authStore.load()
     const isAuthenticated = computed(() => authStore.isAuthenticated)
+    // P0-2(b)：idle 只调 auth.logout() 清会话，绝不走下方 logout() 清账本路径
     useIdleLogout(isAuthenticated)
 
     const openingStore = useOpeningBalanceStore()    
     const syncConflict = ref(null) // 云端冲突信息 { serverVersion, serverUpdatedAt }
     const syncRemoteAhead = ref(null) // 回前台发现云端更新 { version, updatedAt }（提示条）
+    const cloudBoundOffline = ref(false) // P0-2(c) 离线绑定门闸
     const hasOpenedBooks = computed(() => openingStore.hasOpenedBooks)
+    // 未建账时默认进向导；已建账进总览（离线绑定门闸开启后由 applySettleOutcome 改道）
+    const activeMenu = ref(openingStore.hasOpenedBooks ? 'dashboard' : 'opening-books')
 
-    const logout = () => {
-      authStore.logout()
-      closePushGate() // 内存闸门关闭；不清 pam-cloud-bound（S4'）
-      diagLog('logout')
-      ElMessage.success('已退出登录（账本仍保留在本机）')
+    const applySettleOutcome = (outcome) => {
+      const block = shouldBlockEmptyLedgerOnboarding(outcome)
+      cloudBoundOffline.value = block
+      if (block && activeMenu.value === 'opening-books') {
+        activeMenu.value = 'dashboard'
+      }
+    }
+
+    /**
+     * S4' 普通退出（用户显式点击）：清本机账本缓存 + 保留 pam-cloud-bound + 强制 reload。
+     * 与 idle / auth.logout 分路；与安全退出对 bound 的处理也分路。
+     */
+    const logout = async () => {
+      try {
+        const { wipeLedgerKeepCloudBound } = await import('./utils/ledgerWipe.js')
+        const result = wipeLedgerKeepCloudBound()
+        if (!result.success) {
+          ElMessage.error(result.message || '清除本机账本失败')
+          return
+        }
+        authStore.logout()
+        closePushGate()
+        diagLog('logout_wipe_keep_bound')
+        ElMessage.success('已退出并清除本机账本缓存（云端保留；绑定标记保留）')
+        setTimeout(() => {
+          window.location.reload()
+        }, 800)
+      } catch (e) {
+        ElMessage.error('退出失败：' + (e?.message || e))
+      }
     }
 
     const secureLogout = async () => {
       try {
         const { showSecureLogoutDialog } = await import('./utils/dataReset.js')
         await showSecureLogoutDialog(() => {
-          diagLog('secure_logout_wipe')
-          ElMessage.success('本机账本已清除，正在退出 Cloudflare 登录…')
+          diagLog('secure_logout_wipe_clear_bound')
+          ElMessage.success('本机账本与绑定标记已清除，正在退出 Cloudflare 登录…')
           setTimeout(() => {
             const host = window.location.hostname
             const isLocalDev = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === ''
@@ -422,8 +478,7 @@ export default {
       }
     }
 
-    // 未建账时默认进向导；已建账进总览
-    const activeMenu = ref(openingStore.hasOpenedBooks ? 'dashboard' : 'opening-books')
+    // activeMenu 已提前声明（供 applySettleOutcome / 离线门闸）
     const showMobileMenu = ref(false)
     const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
     const resetting = ref(false)
@@ -482,10 +537,19 @@ export default {
     }
 
     const handleMenuSelect = (index) => {
+      if (cloudBoundOffline.value && index === 'opening-books' && !hasOpenedBooks.value) {
+        ElMessage.info('账本在云端，当前离线，请联网后进入')
+        return
+      }
       activeMenu.value = index
     }
 
     const handleMobileMenuSelect = (index) => {
+      if (cloudBoundOffline.value && index === 'opening-books' && !hasOpenedBooks.value) {
+        ElMessage.info('账本在云端，当前离线，请联网后进入')
+        showMobileMenu.value = false
+        return
+      }
       activeMenu.value = index
       showMobileMenu.value = false
     }
@@ -509,6 +573,10 @@ export default {
           activeMenu.value = 'lent-money'
           break
         case 'openingBooks':
+          if (cloudBoundOffline.value && !hasOpenedBooks.value) {
+            ElMessage.info('账本在云端，当前离线，请联网后进入')
+            break
+          }
           activeMenu.value = 'opening-books'
           break
       }
@@ -544,9 +612,13 @@ export default {
 
     /** P0-1：仅在 LoginGate 通过后 settle；门闸 UI 亦在该边界内 */
     const runSettleAfterAuth = () => {
-      settleLedger().catch((e) => {
-        console.warn('[cloud-sync] settle after auth failed:', e?.message || e)
-      })
+      settleLedger()
+        .then((outcome) => {
+          applySettleOutcome(outcome)
+        })
+        .catch((e) => {
+          console.warn('[cloud-sync] settle after auth failed:', e?.message || e)
+        })
     }
 
     onMounted(() => {
@@ -563,6 +635,7 @@ export default {
           syncConflict.value = { serverVersion, serverUpdatedAt }
         },
         onHydrated: () => {
+          cloudBoundOffline.value = false
           ElMessage.success('已从云端同步最新账本')
           // P0-3：优先重灌 Pinia，整页 reload 仅作兜底
           reloadAllStores().catch((e) => {
@@ -580,6 +653,9 @@ export default {
         onAuthExpired: () => {
           closePushGate()
           ElMessage.warning('云同步已断开（登录会话过期），请刷新页面重新登录')
+        },
+        onSettle: (outcome) => {
+          applySettleOutcome(outcome)
         }
       })
       if (isAuthenticated.value) {
@@ -682,6 +758,7 @@ export default {
       openDiagnostics,
       resetting,
       hasOpenedBooks,
+      cloudBoundOffline,
       isAuthenticated,
       menuItems,
       handleMenuSelect,
