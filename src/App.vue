@@ -16,7 +16,10 @@
             <p class="text-base font-semibold tracking-tight truncate">我的账本</p>
             <p class="text-xs text-subtext-light dark:text-subtext-dark mt-0.5">个人资产</p>
           </div>
-          <ThemeToggle />
+          <div class="flex items-center gap-2 shrink-0">
+            <SyncStatusIndicator variant="sidebar" />
+            <ThemeToggle />
+          </div>
         </div>
 
         <nav class="flex-1 px-3 space-y-0.5">
@@ -126,7 +129,10 @@
             </button>
             <h1 class="text-sm font-semibold truncate">{{ getCurrentPageTitle() }}</h1>
           </div>
-          <ThemeToggle />
+          <div class="flex items-center gap-2 shrink-0">
+            <SyncStatusIndicator />
+            <ThemeToggle />
+          </div>
         </header>
 
         <!-- 移动抽屉 -->
@@ -355,6 +361,7 @@ import OpeningBooks from './components/OpeningBooks.vue'
 import LoginGate from './components/LoginGate.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import LineIcon from './components/LineIcon.vue'
+import SyncStatusIndicator from './components/SyncStatusIndicator.vue'
 import { useOpeningBalanceStore } from './stores/openingBalance.js'
 import { useAuthStore } from './stores/auth.js'
 import { useIdleLogout } from './composables/useIdleLogout.js'
@@ -392,7 +399,8 @@ export default {
     OpeningBooks,
     LoginGate,
     ThemeToggle,
-    LineIcon
+    LineIcon,
+    SyncStatusIndicator
   },
   setup() {
     const authStore = useAuthStore()
