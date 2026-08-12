@@ -36,7 +36,14 @@ export const STORAGE_KEYS = Object.freeze({
    */
   AUTH: 'pam-auth',
   /** 主题偏好（非账本；重置账本时保留） */
-  THEME: 'theme-settings'
+  THEME: 'theme-settings',
+  /**
+   * 曾绑定云端账本的轻量标记（B2 / P0-2(c)）
+   * 值建议 { lastVersion, lastSyncedAt }，可选 email 哈希；不含账本正文。
+   * 写入时机与普通/安全退出差异 → S4'（C2）；本常量仅登记归属。
+   * 不进 ALL_CLEARABLE_KEYS / 同步 payload / dirty 白名单；resetSyncState 不得清除。
+   */
+  CLOUD_BOUND: 'pam-cloud-bound'
 })
 
 /**
@@ -76,5 +83,6 @@ export const ALL_CLEARABLE_KEYS = Object.freeze([
 /** 重置时明确保留（文档用，供检查） */
 export const PRESERVED_ON_RESET_KEYS = Object.freeze([
   STORAGE_KEYS.AUTH,
-  STORAGE_KEYS.THEME
+  STORAGE_KEYS.THEME,
+  STORAGE_KEYS.CLOUD_BOUND
 ])

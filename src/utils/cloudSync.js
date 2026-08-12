@@ -1,17 +1,16 @@
 /**
- * PAM 二期云同步 · 前端同步层（D6 + P1 修复）
+ * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1'）
  *
- * - localStorage 主副本不变：记账照常写本地
- * - patch localStorage.setItem / removeItem 检测业务键变化 → 置 dirty → 防抖 2s 推云（PUT）
- * - 启动拉云（GET）：云端更新则合入本地并重载；本地领先则推上云
- * - 推送遇 409（云端已被别处更新）→ 交回调弹窗，用户选「用本地 / 用云端」
- * - 离线优先：推云失败不阻塞记账，dirty 持久化（pam-sync-dirty）；联网 / 下次启动 / 回前台补推
- * - 回前台拉取：命中新数据只提示（onRemoteAhead），不写存储——避免「存储新、内存旧」的静默覆盖
- * - 鉴权失效（Access 会话过期）与网络错误分开：前者 onAuthExpired 明确提示，后者静默重试
+ * 权威限定：settle 时刻以 KV 为准；两次 settle 之间真源仍是本机内存 / localStorage。
  *
- * P1 修复：F1 dirty 持久化+退避重试+online / I3 patch removeItem
- *          / I4 redirect manual+onAuthExpired / I1 冲突解决不谎报
- *          / 前台拉取门控 hydrate 本身（不门控通知）
+ * S1' / M1'：
+ * - P0-1：早 patch（可先于 LoginGate）与 settle 解耦；settle 仅在鉴权通过后触发
+ * - B1 + C1：推送闸门（内存态）；runPush 入口检查；online/回前台 → re-settle
+ * - P0-3：reloadAllStores() 重灌 Pinia，少整页 reload
+ * - P0-4：hydrate 失败不写 version、闸门保持关闭
+ * - P0-5：fetch AbortController ~9s，超时走 offline 分支
+ *
+ * 冲突解决路径显式豁免闸门（用户显式决定）。
  */
 import { collectLedgerData, replaceLedgerData, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from './ledgerBackup.js'
 import { ALL_CLEARABLE_KEYS } from '../constants/storageKeys.js'
@@ -20,10 +19,12 @@ const SYNC_META_KEY = 'pam-sync-meta'
 const DIRTY_KEY = 'pam-sync-dirty'
 const API_BASE = '/api/ledger'
 const DEBOUNCE_MS = 2000
-const RETRY_MS = 30000 // 推云失败后的一次退避重试间隔
-const FOREGROUND_THROTTLE_MS = 15000 // iOS visibilitychange 触发频繁，回前台拉取节流
+const RETRY_MS = 30000
+const FOREGROUND_THROTTLE_MS = 15000
+/** P0-5：弱网门闸超时（8–10s） */
+const FETCH_TIMEOUT_MS = 9000
 
-// initSync 时捕获本实例的 localStorage（多实例/测试可隔离，避免全局串扰）
+// initSync / installPatch 时捕获本实例的 localStorage（多实例/测试可隔离）
 let _ls = null
 function ls() {
   return _ls || globalThis.localStorage
@@ -33,8 +34,48 @@ let pushTimer = null
 let retryTimer = null
 let lastForegroundPullAt = 0
 let pushing = false
-let suppressing = false // hydrate/合入期间抑制 dirty 触发，避免同步回环
-let handlers = { onConflict: null, onHydrated: null, onRemoteAhead: null, onAuthExpired: null }
+let suppressing = false
+let handlers = {
+  onConflict: null,
+  onHydrated: null,
+  onRemoteAhead: null,
+  onAuthExpired: null,
+  onHydrateFailed: null
+}
+
+/** B1/C1：推送闸门（内存态；刷新即关闭） */
+let pushArmed = false
+/** P0-4：hydrate 失败后需重拉；期间禁止推送 */
+let needRepull = false
+let storagePatched = false
+let lifecycleAttached = false
+let settling = false
+
+// ── 闸门 ───────────────────────────────────────────────────
+export function isPushArmed() {
+  return pushArmed
+}
+
+export function isNeedRepull() {
+  return needRepull
+}
+
+function openPushGate() {
+  pushArmed = true
+}
+
+/** 关闭闸门（不改 dirty / version / pam-cloud-bound） */
+export function closePushGate() {
+  pushArmed = false
+}
+
+function armGateAndCatchUpIfDirty() {
+  openPushGate()
+  if (isDirty()) {
+    clearTimeout(pushTimer)
+    pushTimer = setTimeout(runPush, DEBOUNCE_MS)
+  }
+}
 
 // ── 版本元数据（本地视角的云端版本）──────────────────────────
 export function getLocalVersion() {
@@ -69,6 +110,9 @@ export function serializeLocal() {
 
 /** 用云 data 覆盖写回本地（先清后写，复用 E1 纯函数） */
 export function hydrateLocal(data) {
+  if (data == null || typeof data !== 'object') {
+    throw new Error('invalid hydrate payload')
+  }
   suppressing = true
   try {
     replaceLedgerData(
@@ -92,19 +136,33 @@ function hasLocalData() {
 
 // ── 云 API ─────────────────────────────────────────────────
 function isAuthFailure(res) {
-  // redirect:'manual' 下 302 → opaqueredirect（Access 会话过期跳登录页）
   return res.type === 'opaqueredirect' || res.status === 401 || res.status === 403
 }
 
+async function fetchWithTimeout(url, opts = {}) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function fetchRemote() {
-  const res = await fetch(API_BASE, { headers: { Accept: 'application/json' }, redirect: 'manual' })
+  const res = await fetchWithTimeout(API_BASE, {
+    headers: { Accept: 'application/json' },
+    redirect: 'manual'
+  })
   if (isAuthFailure(res)) {
     handlers.onAuthExpired?.()
-    throw new Error('auth expired')
+    const err = new Error('auth expired')
+    err.code = 'auth-expired'
+    throw err
   }
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`云端拉取失败 HTTP ${res.status}`)
-  return res.json() // { version, updatedAt, data }
+  return res.json()
 }
 
 /** 供 UI 层在冲突覆盖前拉取「将被丢弃的云端副本」（I2 备份用） */
@@ -113,7 +171,7 @@ export async function getRemoteLedger() {
 }
 
 async function pushRemote(data, version) {
-  const res = await fetch(API_BASE, {
+  const res = await fetchWithTimeout(API_BASE, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ version, data }),
@@ -121,45 +179,53 @@ async function pushRemote(data, version) {
   })
   if (isAuthFailure(res)) {
     handlers.onAuthExpired?.()
-    throw new Error('auth expired')
+    const err = new Error('auth expired')
+    err.code = 'auth-expired'
+    throw err
   }
   if (res.status === 409) {
     const body = await res.json()
     return { conflict: true, serverVersion: body.serverVersion, serverUpdatedAt: body.serverUpdatedAt }
   }
   if (!res.ok) throw new Error(`云端推送失败 HTTP ${res.status}`)
-  return res.json() // { version, updatedAt }
+  return res.json()
 }
 
-// ── 推送 ───────────────────────────────────────────────────
+// ── 推送（闸门检查在 runPush 入口，防 retryTimer 绕过）─────
 export function schedulePush() {
-  setDirty() // 任何计划中的推送都意味着本地有未上云改动
+  setDirty()
   clearTimeout(pushTimer)
   pushTimer = setTimeout(runPush, DEBOUNCE_MS)
 }
 
 async function runPush() {
+  // C1：检查点必须在 runPush 入口（不只 schedulePush）
+  if (!pushArmed || needRepull) return
   if (pushing) return
   pushing = true
   try {
     const data = serializeLocal()
     if (Object.keys(data).length === 0) {
-      // 空账本不推：与「不做 DELETE / 重置不传播云端」语义一致，删除类改动视为已消化
       clearDirty()
       return
     }
     const result = await pushRemote(data, getLocalVersion())
     if (result.conflict) {
+      closePushGate()
       handlers.onConflict?.(result.serverVersion, result.serverUpdatedAt)
       return
     }
     setLocalVersion(result.version, result.updatedAt)
     clearDirty()
-    clearTimeout(retryTimer) // 已成功，取消待退避重试
+    clearTimeout(retryTimer)
+    retryTimer = null
   } catch (err) {
     console.warn('[cloud-sync] push failed:', err?.message || err)
+    if (err?.code === 'auth-expired') {
+      closePushGate()
+      return
+    }
     if (!retryTimer) {
-      // 退避重试一次（30s）；其余交给 online 事件 / 下次写入 / 下次启动
       retryTimer = setTimeout(() => {
         retryTimer = null
         runPush()
@@ -170,46 +236,96 @@ async function runPush() {
   }
 }
 
-// ── 启动 / 回前台拉云 ──────────────────────────────────────
-export async function pullOnStart({ foreground = false } = {}) {
+/**
+ * settle：以 KV 为准对齐本地，并按 C1 表开关闸门。
+ * @returns {Promise<string>} 结论：in-sync | hydrated | empty-cloud | conflict | offline | auth-expired | hydrate-failed | remote-ahead
+ */
+export async function settleLedger({ foreground = false } = {}) {
+  if (settling) return 'busy'
+  settling = true
   try {
-    const remote = await fetchRemote()
-    if (remote == null) {
-      // 云端无记录：本地有账本且（未上过云 或 有未上云改动）→ 首上云 / 补推
-      if (hasLocalData() && (getLocalVersion() === 0 || isDirty())) schedulePush()
-      return
+    let remote
+    try {
+      remote = await fetchRemote()
+    } catch (err) {
+      console.warn('[cloud-sync] settle fetch failed:', err?.message || err)
+      closePushGate()
+      if (err?.code === 'auth-expired') return 'auth-expired'
+      // 超时 / 网络错误 → offline（继续累积 dirty；online/回前台再 settle）
+      return 'offline'
     }
+
+    if (remote == null) {
+      // empty-cloud：放开闸门；有本机数据则补推（P1-3 身份前置若已有则由其负责）
+      needRepull = false
+      openPushGate()
+      if (hasLocalData() && (getLocalVersion() === 0 || isDirty())) {
+        clearTimeout(pushTimer)
+        pushTimer = setTimeout(runPush, DEBOUNCE_MS)
+      }
+      return 'empty-cloud'
+    }
+
     const localVersion = getLocalVersion()
+
     if (remote.version > localVersion) {
       if (isDirty()) {
-        // 本地有未上云改动且云端更新 → 真冲突，交用户（不写存储，防静默覆盖）
+        closePushGate()
         handlers.onConflict?.(remote.version, remote.updatedAt)
-        return
+        return 'conflict'
       }
       if (foreground) {
-        // 回前台命中新数据：只提示不写存储（避免「存储新、内存旧」的静默覆盖）
+        // M5：回前台只提示不写存储；闸门可放开（无 dirty，不会误推）
+        openPushGate()
         handlers.onRemoteAhead?.(remote.version, remote.updatedAt)
-        return
+        return 'remote-ahead'
       }
-      hydrateLocal(remote.data)
-      setLocalVersion(remote.version, remote.updatedAt)
-      clearDirty()
-      handlers.onHydrated?.(remote.version, remote.updatedAt)
-      return
+      // 冷启动 / 显式 settle：hydrate
+      try {
+        hydrateLocal(remote.data)
+        setLocalVersion(remote.version, remote.updatedAt)
+        clearDirty()
+        needRepull = false
+        openPushGate()
+        handlers.onHydrated?.(remote.version, remote.updatedAt)
+        return 'hydrated'
+      } catch (hydrateErr) {
+        // P0-4：失败不写 version；禁止推送
+        console.warn('[cloud-sync] hydrate failed:', hydrateErr?.message || hydrateErr)
+        needRepull = true
+        closePushGate()
+        handlers.onHydrateFailed?.(hydrateErr)
+        return 'hydrate-failed'
+      }
     }
+
     if (remote.version < localVersion && hasLocalData()) {
-      schedulePush() // 本地领先（如云端被重置），推上去
-      return
+      needRepull = false
+      armGateAndCatchUpIfDirty()
+      // 本地领先：即使尚未 dirty 也安排一次推（与历史行为一致）
+      if (!isDirty()) {
+        setDirty()
+        clearTimeout(pushTimer)
+        pushTimer = setTimeout(runPush, DEBOUNCE_MS)
+      }
+      return 'in-sync'
     }
-    if (isDirty()) {
-      schedulePush() // 版本相同但本地有未上云改动 → 补推
-    }
-  } catch (err) {
-    console.warn('[cloud-sync] pull failed:', err?.message || err) // 离线静默（鉴权失效另经 onAuthExpired 提示）
+
+    // 版本相同
+    needRepull = false
+    armGateAndCatchUpIfDirty()
+    return 'in-sync'
+  } finally {
+    settling = false
   }
 }
 
-// ── 冲突选择 ───────────────────────────────────────────────
+/** @deprecated 名称保留：内部改为 settleLedger */
+export async function pullOnStart(opts = {}) {
+  return settleLedger(opts)
+}
+
+// ── 冲突选择（显式豁免闸门）────────────────────────────────
 /** 冲突弹窗「用本地」：以服务端版本为基线，把本地推上云；二次 409 不谎报 */
 export async function resolveConflictUseLocal(serverVersion) {
   const data = serializeLocal()
@@ -225,6 +341,8 @@ export async function resolveConflictUseLocal(serverVersion) {
   }
   setLocalVersion(result.version, result.updatedAt)
   clearDirty()
+  needRepull = false
+  openPushGate()
   return { ok: true }
 }
 
@@ -232,59 +350,135 @@ export async function resolveConflictUseLocal(serverVersion) {
 export async function resolveConflictUseCloud() {
   const remote = await fetchRemote()
   if (remote == null) return { ok: false, reason: 'no-cloud-data' }
-  hydrateLocal(remote.data)
-  setLocalVersion(remote.version, remote.updatedAt)
-  clearDirty()
-  handlers.onHydrated?.(remote.version, remote.updatedAt)
-  return { ok: true }
+  try {
+    hydrateLocal(remote.data)
+    setLocalVersion(remote.version, remote.updatedAt)
+    clearDirty()
+    needRepull = false
+    openPushGate()
+    handlers.onHydrated?.(remote.version, remote.updatedAt)
+    return { ok: true }
+  } catch (hydrateErr) {
+    needRepull = true
+    closePushGate()
+    handlers.onHydrateFailed?.(hydrateErr)
+    return { ok: false, reason: 'hydrate-failed' }
+  }
 }
 
-// ── 初始化：patch localStorage + 生命周期监听 + 启动拉云 ──
+// ── P0-3：重灌 Pinia（勿包 suppressing，确保 catchUp 可置 dirty）──
+/** @returns {Promise<void>} */
+export async function reloadAllStores() {
+  const [
+    { useFinanceStore },
+    { useBankAccountsStore },
+    { useOpeningBalanceStore },
+    { useStockInvestmentStore },
+    { useFundInvestmentStore },
+    { useLentMoneyStore },
+    { useMonthlyStatementsStore }
+  ] = await Promise.all([
+    import('../stores/finance.js'),
+    import('../stores/bankAccounts.js'),
+    import('../stores/openingBalance.js'),
+    import('../stores/stockInvestment.js'),
+    import('../stores/fundInvestment.js'),
+    import('../stores/lentMoney.js'),
+    import('../stores/monthlyStatements.js')
+  ])
+
+  useFinanceStore().loadFromLocalStorage()
+  useBankAccountsStore().loadFromLocalStorage()
+  useOpeningBalanceStore().loadFromLocalStorage()
+  useStockInvestmentStore().loadFromLocalStorage()
+  useFundInvestmentStore().loadFromLocalStorage()
+  useLentMoneyStore().loadFromLocalStorage()
+  const monthly = useMonthlyStatementsStore()
+  monthly.loadFromLocalStorage()
+  // ensureCatchUp 写入必须能置 dirty（此时不应 suppressing）
+  monthly.ensureCatchUp()
+}
+
+// ── 初始化：patch localStorage + 生命周期（不自动 settle）──
 function onForeground() {
   const now = Date.now()
   if (now - lastForegroundPullAt < FOREGROUND_THROTTLE_MS) return
   lastForegroundPullAt = now
-  pullOnStart({ foreground: true })
+  // C1：回前台 → re-settle，不直接 push
+  settleLedger({ foreground: true })
 }
 
 function attachLifecycleListeners() {
+  if (lifecycleAttached) return
   const target = globalThis.window ?? globalThis
   if (typeof target?.addEventListener !== 'function') return
+  lifecycleAttached = true
   target.addEventListener('visibilitychange', () => {
     if (globalThis.document?.visibilityState === 'visible') onForeground()
   })
   target.addEventListener('focus', onForeground)
-  target.addEventListener('online', () => schedulePush())
+  // C1：online → re-settle，不直接 push
+  target.addEventListener('online', () => {
+    settleLedger()
+  })
 }
 
-export function initSync(options = {}) {
-  handlers = { onConflict: null, onHydrated: null, onRemoteAhead: null, onAuthExpired: null, ...options }
-  const storage = ls()
-  _ls = storage
-  const originalSetItem = storage.setItem.bind(storage)
-  const originalRemoveItem = storage.removeItem.bind(storage)
-  storage.setItem = (key, value) => {
+/**
+ * P0-1 方案 A：尽早安装 localStorage patch（可在 LoginGate 前）。
+ * 闸门默认关闭，故 ensureCatchUp 等写入只会置 dirty、不会 PUT。
+ */
+export function installLocalStoragePatch(storage = null) {
+  const target = storage || ls()
+  _ls = target
+  if (storagePatched) return
+  storagePatched = true
+  const originalSetItem = target.setItem.bind(target)
+  const originalRemoveItem = target.removeItem.bind(target)
+  target.setItem = (key, value) => {
     originalSetItem(key, value)
     if (!suppressing && ALL_CLEARABLE_KEYS.includes(key)) {
       schedulePush()
     }
   }
-  storage.removeItem = (key) => {
+  target.removeItem = (key) => {
     originalRemoveItem(key)
     if (!suppressing && ALL_CLEARABLE_KEYS.includes(key)) {
       schedulePush()
     }
   }
-  attachLifecycleListeners()
-  pullOnStart()
 }
 
-/** 重置同步状态（重置账本时调用）：清版本、清 dirty、取消待推/待重试 */
+/**
+ * 注册回调与生命周期监听。不触发 settle（须在 LoginGate 通过后调用 settleLedger）。
+ */
+export function initSync(options = {}) {
+  handlers = {
+    onConflict: null,
+    onHydrated: null,
+    onRemoteAhead: null,
+    onAuthExpired: null,
+    onHydrateFailed: null,
+    ...options
+  }
+  const storage = options.storage || ls()
+  _ls = storage
+  installLocalStoragePatch(storage)
+  attachLifecycleListeners()
+  // P0-1：不在此处 settle / pullOnStart
+}
+
+/**
+ * 重置同步状态（重置账本时调用）：清版本、清 dirty、关闸门、取消定时器。
+ * 不清 pam-cloud-bound（C2 / S4'）。
+ */
 export function resetSyncState() {
   clearTimeout(pushTimer)
   clearTimeout(retryTimer)
   pushTimer = null
   retryTimer = null
+  closePushGate()
+  needRepull = false
   ls().removeItem(SYNC_META_KEY)
   ls().removeItem(DIRTY_KEY)
+  // pam-cloud-bound intentionally preserved (C2)
 }
