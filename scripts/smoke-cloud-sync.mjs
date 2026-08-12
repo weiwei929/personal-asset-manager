@@ -1,12 +1,18 @@
 /**
- * D6 门闩 · 双标签云同步 smoke（模拟）+ v1.08.12 S1' 门闩
+ * D6 门闩 · 双标签云同步 smoke（模拟）+ v1.08.12 S1' / S4' 门闩
  * 用两个独立模块实例模拟「设备 A / 设备 B」+ mock 云端（KV 版乐观锁）：
  *   A 记账 → 防抖推云 → B 启动拉云拿到数据 → 冲突 409 → 用本地/用云端解决
  * S1'：settle 前不抢跑 PUT；hydrate 失败禁推；online → re-settle
+ * S4'：pam-cloud-bound 写入；普通/安全退出分路；resetSyncState 保留 bound；idle 源码门闩
  * 运行：node scripts/smoke-cloud-sync.mjs
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { ALL_CLEARABLE_KEYS, STORAGE_KEYS, PRESERVED_ON_RESET_KEYS } from '../src/constants/storageKeys.js'
 
+const __smokeDir = dirname(fileURLToPath(import.meta.url))
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const EMAIL_KEY = 'ledger:user@example.com'
 
@@ -289,9 +295,101 @@ assert.equal(devF.isPushArmed(), false)
 assert.ok(lsF.getItem('pam-cloud-bound') != null, 'resetSyncState 不得清除 pam-cloud-bound')
 console.log('✓ resetSyncState 关闸门且保留 pam-cloud-bound')
 
+// ═══════════════ S4' / M8'：pam-cloud-bound 写入 + 退出分路 ═══════════════
+
+// B2：键归属
+assert.ok(!ALL_CLEARABLE_KEYS.includes(STORAGE_KEYS.CLOUD_BOUND), 'CLOUD_BOUND 不得进 ALL_CLEARABLE_KEYS')
+assert.ok(PRESERVED_ON_RESET_KEYS.includes(STORAGE_KEYS.CLOUD_BOUND), 'CLOUD_BOUND 应在 PRESERVED 清单')
+console.log('✓ S4\' B2：pam-cloud-bound 不进 ALL_CLEARABLE_KEYS，在 PRESERVED')
+
+// 成功 PUT / settle → setLocalVersion 同处写 bound
+cloudKV.clear()
+putCount = 0
+const lsS4 = createLocalStorage()
+globalThis.localStorage = lsS4
+online = true
+hangGet = false
+const devS4 = await import('../src/utils/cloudSync.js?browser=S4')
+devS4.initSync({})
+await devS4.settleLedger() // empty-cloud
+assert.equal(lsS4.getItem('pam-cloud-bound'), null, '未成功同步前不应有 bound')
+lsS4.setItem('pam-bank-accounts', JSON.stringify([{ id: 1, bank: 'S4银行', balance: 42 }]))
+await sleep(2600)
+assert.equal(devS4.getLocalVersion(), 1)
+const boundAfterPush = JSON.parse(lsS4.getItem('pam-cloud-bound') || 'null')
+assert.ok(boundAfterPush, '成功 PUT 后应写入 pam-cloud-bound')
+assert.equal(boundAfterPush.lastVersion, 1, 'bound.lastVersion 应对齐')
+assert.ok(boundAfterPush.lastSyncedAt, 'bound 应含 lastSyncedAt')
+console.log('✓ S4\' 成功推送写入 pam-cloud-bound')
+
+// in-sync settle 也应刷新 bound
+const boundBeforeSettle = lsS4.getItem('pam-cloud-bound')
+await sleep(10)
+const s4InSync = await devS4.settleLedger()
+assert.equal(s4InSync, 'in-sync')
+const boundAfterSettle = JSON.parse(lsS4.getItem('pam-cloud-bound') || 'null')
+assert.ok(boundAfterSettle?.lastVersion === 1)
+assert.ok(lsS4.getItem('pam-cloud-bound') != null)
+console.log('✓ S4\' in-sync settle 保持/刷新 pam-cloud-bound（prev=', !!boundBeforeSettle, '）')
+
+// 普通退出 wipe：清账本键、保留 bound
+const { wipeLedgerKeepCloudBound, wipeLedgerClearCloudBound } = await import('../src/utils/ledgerWipe.js?browser=S4wipe')
+lsS4.setItem('pam-opening-balance', JSON.stringify({ date: '2026-01-01', completedAt: '2026-01-01T00:00:00Z' }))
+lsS4.setItem('pam-auth', JSON.stringify({ salt: 'x', hash: 'y' }))
+lsS4.setItem('theme-settings', JSON.stringify({ mode: 'light' }))
+const keep = wipeLedgerKeepCloudBound()
+assert.equal(keep.success, true)
+devS4.resetSyncState() // 单测多实例：取消 patched 实例上残留定时器（生产为单例）
+assert.equal(devS4.isLedgerCacheWiped(), true, '普通退出应清账本业务键')
+assert.ok(lsS4.getItem('pam-cloud-bound') != null, '普通退出必须保留 pam-cloud-bound')
+assert.ok(lsS4.getItem('pam-auth') != null, '普通退出保留口令')
+assert.ok(lsS4.getItem('theme-settings') != null, '普通退出保留主题')
+assert.equal(lsS4.getItem('pam-sync-meta'), null, 'wipe 后 sync-meta 应清')
+console.log('✓ S4\' 普通退出 wipe：清账本、保留 pam-cloud-bound')
+
+// 离线门闸：offline + bound + 无期初 → block
+assert.equal(
+  devS4.shouldBlockEmptyLedgerOnboarding('offline'),
+  true,
+  '离线+bound+无期初应禁止建账'
+)
+assert.equal(devS4.shouldBlockEmptyLedgerOnboarding('in-sync'), false)
+lsS4.setItem('pam-opening-balance', JSON.stringify({ date: '2026-01-01', completedAt: 'x' }))
+assert.equal(devS4.shouldBlockEmptyLedgerOnboarding('offline'), false, '已有期初则不拦截')
+lsS4.removeItem('pam-opening-balance')
+console.log('✓ S4\' 离线绑定门闸 shouldBlockEmptyLedgerOnboarding')
+
+// 安全退出 wipe：清 bound
+// 先恢复 bound（模拟仍绑定）
+devS4.writeCloudBoundMark({ lastVersion: 9, lastSyncedAt: '2026-08-12T00:00:00Z' })
+lsS4.setItem('pam-bank-accounts', JSON.stringify([{ id: 2 }]))
+const clear = wipeLedgerClearCloudBound()
+assert.equal(clear.success, true)
+devS4.resetSyncState()
+assert.equal(devS4.isLedgerCacheWiped(), true)
+assert.equal(lsS4.getItem('pam-cloud-bound'), null, '安全退出必须清除 pam-cloud-bound')
+assert.equal(devS4.shouldBlockEmptyLedgerOnboarding('offline'), false, '无 bound 则不拦')
+console.log('✓ S4\' 安全退出 wipe：清账本并清除 pam-cloud-bound')
+
+// resetSyncState 再次确认不清 bound（在 clear 后再写回测）
+lsS4.setItem('pam-cloud-bound', JSON.stringify({ lastVersion: 3 }))
+devS4.resetSyncState()
+assert.ok(lsS4.getItem('pam-cloud-bound') != null, 'C2：resetSyncState 仍不得清 bound')
+console.log('✓ S4\' C2：resetSyncState 仍保留 pam-cloud-bound')
+
+// idle logout：源码硬门闩 — 业务路径只调 auth.logout()
+const idleSrc = readFileSync(join(__smokeDir, '../src/composables/useIdleLogout.js'), 'utf8')
+const idleTick = idleSrc.slice(idleSrc.indexOf('const tick'), idleSrc.indexOf('const start'))
+assert.ok(idleTick.includes('auth.logout()'), 'idle tick 应调用 auth.logout()')
+assert.ok(!idleTick.includes('wipeLedger'), 'idle tick 不得 wipeLedger')
+assert.ok(!idleTick.includes('clearAllData'), 'idle tick 不得 clearAllData')
+assert.ok(!idleTick.includes('removeItem'), 'idle tick 不得直接 removeItem')
+console.log('✓ S4\' idle logout 源码只清会话、不清账本（P0-2(b)）')
+
 devC.resetSyncState()
 devGate.resetSyncState()
 devE.resetSyncState()
 devF.resetSyncState()
+devS4.resetSyncState()
 
-console.log('\nOK cloud-sync smoke: 全部通过（含 S1\' 闸门 / hydrate 失败禁推 / fetch 超时）')
+console.log('\nOK cloud-sync smoke: 全部通过（含 S1\' 闸门 / S4\' bound·退出分路 / hydrate 失败禁推 / fetch 超时）')

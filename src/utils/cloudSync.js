@@ -1,5 +1,5 @@
 /**
- * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1'）
+ * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1' + S4'/M8'）
  *
  * 权威限定：settle 时刻以 KV 为准；两次 settle 之间真源仍是本机内存 / localStorage。
  *
@@ -10,10 +10,15 @@
  * - P0-4：hydrate 失败不写 version、闸门保持关闭
  * - P0-5：fetch AbortController ~9s，超时走 offline 分支
  *
+ * S4' / M8'：
+ * - setLocalVersion 同处写入 pam-cloud-bound（P0-2(c)）
+ * - resetSyncState 不得清 pam-cloud-bound（C2）
+ * - 退出清缓存 / idle 例外 / 离线绑定门闸见 App + dataReset
+ *
  * 冲突解决路径显式豁免闸门（用户显式决定）。
  */
 import { collectLedgerData, replaceLedgerData, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from './ledgerBackup.js'
-import { ALL_CLEARABLE_KEYS } from '../constants/storageKeys.js'
+import { ALL_CLEARABLE_KEYS, STORAGE_KEYS } from '../constants/storageKeys.js'
 
 const SYNC_META_KEY = 'pam-sync-meta'
 const DIRTY_KEY = 'pam-sync-dirty'
@@ -40,7 +45,9 @@ let handlers = {
   onHydrated: null,
   onRemoteAhead: null,
   onAuthExpired: null,
-  onHydrateFailed: null
+  onHydrateFailed: null,
+  /** S4'：settle 结论回调（含 online/回前台 re-settle），供离线绑定门闸 */
+  onSettle: null
 }
 
 /** B1/C1：推送闸门（内存态；刷新即关闭） */
@@ -87,8 +94,89 @@ export function getLocalVersion() {
   }
 }
 
+/**
+ * 成功 settle / 成功 PUT 后写本地版本，并同处更新 pam-cloud-bound（S4' / P0-2(c)）。
+ * 值不含账本正文；emailHash 可选（本版无客户端身份源时省略）。
+ */
 function setLocalVersion(version, updatedAt) {
-  ls().setItem(SYNC_META_KEY, JSON.stringify({ version, updatedAt }))
+  const syncedAt = updatedAt || new Date().toISOString()
+  ls().setItem(SYNC_META_KEY, JSON.stringify({ version, updatedAt: syncedAt }))
+  writeCloudBoundMark({ lastVersion: version, lastSyncedAt: syncedAt })
+}
+
+/** @returns {{ lastVersion: number, lastSyncedAt?: string, emailHash?: string } | null} */
+export function getCloudBoundMark() {
+  try {
+    const raw = ls().getItem(STORAGE_KEYS.CLOUD_BOUND)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export function isCloudBound() {
+  return getCloudBoundMark() != null
+}
+
+/** 写入绑定标记（不进 dirty 白名单；直接写 LS） */
+export function writeCloudBoundMark({ lastVersion, lastSyncedAt, emailHash } = {}) {
+  const payload = {
+    lastVersion: Number.isInteger(lastVersion) ? lastVersion : 0,
+    lastSyncedAt: lastSyncedAt || new Date().toISOString()
+  }
+  if (emailHash) payload.emailHash = emailHash
+  // 保留既有 emailHash（若本次未传入）
+  if (!emailHash) {
+    const prev = getCloudBoundMark()
+    if (prev?.emailHash) payload.emailHash = prev.emailHash
+  }
+  ls().setItem(STORAGE_KEYS.CLOUD_BOUND, JSON.stringify(payload))
+}
+
+/** 仅安全退出路径调用（S4'）；普通退出不得调用 */
+export function clearCloudBoundMark() {
+  ls().removeItem(STORAGE_KEYS.CLOUD_BOUND)
+}
+
+/**
+ * S4'：本机账本业务键是否均已清空（忽略退出后写回的默认分类）。
+ * 供 smoke / 退出路径断言；不把 pam-cloud-bound / AUTH / THEME 算入。
+ */
+export function isLedgerCacheWiped() {
+  for (const key of ALL_CLEARABLE_KEYS) {
+    if (key === STORAGE_KEYS.FINANCE_CATEGORIES) continue
+    if (ls().getItem(key) != null) return false
+  }
+  return true
+}
+
+/** 是否有本机账本业务数据（serialize 非空） */
+export function hasLocalLedgerData() {
+  return hasLocalData()
+}
+
+/** 本机是否已完成期初建账（读 LS，不依赖 Pinia） */
+export function hasOpenedBooksInStorage() {
+  try {
+    const raw = ls().getItem(STORAGE_KEYS.OPENING_BALANCE)
+    if (!raw) return false
+    const data = JSON.parse(raw)
+    return Boolean(data?.completedAt)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * P0-2(c)：离线 + 无期初建账 + 曾绑定云端 → 禁止建账引导。
+ * （退出清缓存后仍会写回默认分类，故不能用 hasLocalData）
+ * @param {string} settleOutcome
+ */
+export function shouldBlockEmptyLedgerOnboarding(settleOutcome) {
+  return settleOutcome === 'offline' && isCloudBound() && !hasOpenedBooksInStorage()
 }
 
 // ── dirty：本地存在未上云改动（离线优先的落盘标记）────────────
@@ -243,6 +331,7 @@ async function runPush() {
 export async function settleLedger({ foreground = false } = {}) {
   if (settling) return 'busy'
   settling = true
+  let outcome = 'offline'
   try {
     let remote
     try {
@@ -250,9 +339,13 @@ export async function settleLedger({ foreground = false } = {}) {
     } catch (err) {
       console.warn('[cloud-sync] settle fetch failed:', err?.message || err)
       closePushGate()
-      if (err?.code === 'auth-expired') return 'auth-expired'
+      if (err?.code === 'auth-expired') {
+        outcome = 'auth-expired'
+        return outcome
+      }
       // 超时 / 网络错误 → offline（继续累积 dirty；online/回前台再 settle）
-      return 'offline'
+      outcome = 'offline'
+      return outcome
     }
 
     if (remote == null) {
@@ -263,7 +356,8 @@ export async function settleLedger({ foreground = false } = {}) {
         clearTimeout(pushTimer)
         pushTimer = setTimeout(runPush, DEBOUNCE_MS)
       }
-      return 'empty-cloud'
+      outcome = 'empty-cloud'
+      return outcome
     }
 
     const localVersion = getLocalVersion()
@@ -272,13 +366,15 @@ export async function settleLedger({ foreground = false } = {}) {
       if (isDirty()) {
         closePushGate()
         handlers.onConflict?.(remote.version, remote.updatedAt)
-        return 'conflict'
+        outcome = 'conflict'
+        return outcome
       }
       if (foreground) {
         // M5：回前台只提示不写存储；闸门可放开（无 dirty，不会误推）
         openPushGate()
         handlers.onRemoteAhead?.(remote.version, remote.updatedAt)
-        return 'remote-ahead'
+        outcome = 'remote-ahead'
+        return outcome
       }
       // 冷启动 / 显式 settle：hydrate
       try {
@@ -288,14 +384,16 @@ export async function settleLedger({ foreground = false } = {}) {
         needRepull = false
         openPushGate()
         handlers.onHydrated?.(remote.version, remote.updatedAt)
-        return 'hydrated'
+        outcome = 'hydrated'
+        return outcome
       } catch (hydrateErr) {
         // P0-4：失败不写 version；禁止推送
         console.warn('[cloud-sync] hydrate failed:', hydrateErr?.message || hydrateErr)
         needRepull = true
         closePushGate()
         handlers.onHydrateFailed?.(hydrateErr)
-        return 'hydrate-failed'
+        outcome = 'hydrate-failed'
+        return outcome
       }
     }
 
@@ -308,15 +406,23 @@ export async function settleLedger({ foreground = false } = {}) {
         clearTimeout(pushTimer)
         pushTimer = setTimeout(runPush, DEBOUNCE_MS)
       }
-      return 'in-sync'
+      outcome = 'in-sync'
+      return outcome
     }
 
-    // 版本相同
+    // 版本相同 —— 仍刷新 bound 时间戳（与 setLocalVersion 同语义：成功对齐）
+    setLocalVersion(remote.version, remote.updatedAt)
     needRepull = false
     armGateAndCatchUpIfDirty()
-    return 'in-sync'
+    outcome = 'in-sync'
+    return outcome
   } finally {
     settling = false
+    try {
+      handlers.onSettle?.(outcome)
+    } catch (e) {
+      console.warn('[cloud-sync] onSettle handler failed:', e?.message || e)
+    }
   }
 }
 
@@ -458,6 +564,7 @@ export function initSync(options = {}) {
     onRemoteAhead: null,
     onAuthExpired: null,
     onHydrateFailed: null,
+    onSettle: null,
     ...options
   }
   const storage = options.storage || ls()

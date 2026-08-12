@@ -1,5 +1,8 @@
 /**
- * 登录后：空闲超时自动退出会话（不删账本）
+ * 登录后：空闲超时自动退出会话（不删账本 · P0-2(b) / S4'）
+ *
+ * 硬约束：只调用 auth.logout() 清会话，禁止调用 App 的 logout() /
+ * wipeLedger* / clearAllData。吃饭回来账本必须还在。
  */
 import { onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -19,6 +22,7 @@ export function useIdleLogout(isAuthenticatedRef) {
   const tick = () => {
     if (!auth.isAuthenticated) return
     if (Date.now() - lastActive >= IDLE_TIMEOUT_MS) {
+      // P0-2(b)：仅清会话，不清账本缓存 / 不清 pam-cloud-bound
       auth.logout()
       ElMessage.warning(
         `已闲置超过 ${Math.round(IDLE_TIMEOUT_MS / 60000)} 分钟，已自动退出登录`
