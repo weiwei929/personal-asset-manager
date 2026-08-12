@@ -21,7 +21,7 @@
     "preview": "npm run build && npx serve dist",
     "deploy:prepare": "node scripts/deploy-prepare.js",
     "clean": "rimraf dist",
-    "smoke": "node scripts/smoke-finance-logic.mjs && node scripts/smoke-cloud-sync.mjs && node scripts/smoke-access-jwt.mjs"
+    "smoke": "node scripts/smoke-finance-logic.mjs && node scripts/smoke-cloud-sync.mjs && node scripts/smoke-access-jwt.mjs && node scripts/smoke-sync-status.mjs"
   },
   "dependencies": {
     "core-js": "^3.8.3",

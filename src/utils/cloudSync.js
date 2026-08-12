@@ -1,5 +1,5 @@
 /**
- * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1' + S2'/M2'+M4' + S4'/M8'）
+ * PAM 云同步 · 前端同步层（D6/P1 + v1.08.12 S1'/M1' + S2'/M2'+M4' + S4'/M8' + S3/M3）
  *
  * 权威限定：settle 时刻以 KV 为准；两次 settle 之间真源仍是本机内存 / localStorage。
  *
@@ -21,6 +21,9 @@
  * - resetSyncState 不得清 pam-cloud-bound（C2）
  * - 退出清缓存 / idle 例外 / 离线绑定门闸见 App + dataReset
  *
+ * S3 / M3：
+ * - getSyncStatusFlags / getSyncUiStatus / subscribeSyncStatus（不改 settle/闸门语义）
+ *
  * 冲突解决路径显式豁免闸门（用户显式决定）。
  */
 import {
@@ -32,6 +35,7 @@ import {
 } from './ledgerBackup.js'
 import { calcAssetBreakdown } from './assetTotals.js'
 import { ALL_CLEARABLE_KEYS, STORAGE_KEYS } from '../constants/storageKeys.js'
+import { resolveSyncUiStatus } from './syncStatus.js'
 
 const SYNC_META_KEY = 'pam-sync-meta'
 const DIRTY_KEY = 'pam-sync-dirty'
@@ -83,6 +87,14 @@ let storagePatched = false
 let lifecycleAttached = false
 let settling = false
 
+/** S3/M3：供状态指示器读取的内存真源（不落盘） */
+let lastSettleOutcome = null
+/** push 失败（非 auth）后保持，直到成功 PUT 或成功 settle 清除 */
+let lastPushFailed = false
+/** auth-expired latch：成功鉴权 settle 前保持，便于 UI 提示重新登录 */
+let authExpiredLatched = false
+const statusListeners = new Set()
+
 // ── 闸门 ───────────────────────────────────────────────────
 export function isPushArmed() {
   return pushArmed
@@ -90,6 +102,91 @@ export function isPushArmed() {
 
 export function isNeedRepull() {
   return needRepull
+}
+
+/** S3：导出 dirty 供状态 UI / smoke（不改变写入语义） */
+export function isDirty() {
+  return ls().getItem(DIRTY_KEY) != null
+}
+
+export function getLastSettleOutcome() {
+  return lastSettleOutcome
+}
+
+/**
+ * S3：当前同步标志快照（真源：dirty / needRepull / settle / push / navigator）。
+ * 供 mapSyncUiStatus；勿用定时器假造状态。
+ */
+export function getSyncStatusFlags() {
+  const online =
+    typeof navigator === 'undefined' ? true : navigator.onLine !== false
+  return {
+    online,
+    dirty: isDirty(),
+    authExpired: authExpiredLatched || lastSettleOutcome === 'auth-expired',
+    failed:
+      needRepull ||
+      lastPushFailed ||
+      lastSettleOutcome === 'hydrate-failed' ||
+      lastSettleOutcome === 'identity-blocked',
+    pushArmed,
+    lastOutcome: lastSettleOutcome
+  }
+}
+
+/** @returns {{ id: string, label: string, detail: string, tone: string, blocksLocalView: boolean }} */
+export function getSyncUiStatus() {
+  return resolveSyncUiStatus(getSyncStatusFlags())
+}
+
+/**
+ * 订阅同步 UI 状态变化；返回取消订阅函数。
+ * @param {(status: ReturnType<typeof getSyncUiStatus>) => void} fn
+ */
+export function subscribeSyncStatus(fn) {
+  if (typeof fn !== 'function') return () => {}
+  statusListeners.add(fn)
+  try {
+    fn(getSyncUiStatus())
+  } catch (e) {
+    console.warn('[cloud-sync] status listener failed:', e?.message || e)
+  }
+  return () => {
+    statusListeners.delete(fn)
+  }
+}
+
+function emitSyncStatus() {
+  if (statusListeners.size === 0) return
+  const status = getSyncUiStatus()
+  for (const fn of statusListeners) {
+    try {
+      fn(status)
+    } catch (e) {
+      console.warn('[cloud-sync] status listener failed:', e?.message || e)
+    }
+  }
+}
+
+function noteSettleOutcome(outcome) {
+  if (outcome === 'busy') return
+  lastSettleOutcome = outcome
+  if (outcome === 'auth-expired') {
+    authExpiredLatched = true
+  } else if (
+    outcome === 'in-sync' ||
+    outcome === 'hydrated' ||
+    outcome === 'empty-cloud' ||
+    outcome === 'remote-ahead' ||
+    outcome === 'content-anomaly'
+  ) {
+    authExpiredLatched = false
+    lastPushFailed = false
+  }
+  if (outcome === 'hydrate-failed' || outcome === 'identity-blocked') {
+    lastPushFailed = false
+  }
+  emitSyncStatus()
 }
 
 function openPushGate() {
@@ -315,14 +412,13 @@ export function restoreLastDiscardedLedger() {
 }
 
 // ── dirty：本地存在未上云改动（离线优先的落盘标记）────────────
-function isDirty() {
-  return ls().getItem(DIRTY_KEY) != null
-}
 function setDirty() {
   ls().setItem(DIRTY_KEY, '1')
+  emitSyncStatus()
 }
 function clearDirty() {
   ls().removeItem(DIRTY_KEY)
+  emitSyncStatus()
 }
 
 // ── 序列化 / 合入 ──────────────────────────────────────────
@@ -401,6 +497,8 @@ async function fetchRemote() {
   })
   if (isAuthFailure(res)) {
     handlers.onAuthExpired?.()
+    authExpiredLatched = true
+    emitSyncStatus()
     const err = new Error('auth expired')
     err.code = 'auth-expired'
     throw err
@@ -424,6 +522,8 @@ async function pushRemote(data, version) {
   })
   if (isAuthFailure(res)) {
     handlers.onAuthExpired?.()
+    authExpiredLatched = true
+    emitSyncStatus()
     const err = new Error('auth expired')
     err.code = 'auth-expired'
     throw err
@@ -462,14 +562,20 @@ async function runPush() {
     }
     setLocalVersion(result.version, result.updatedAt)
     clearDirty()
+    lastPushFailed = false
     clearTimeout(retryTimer)
     retryTimer = null
+    emitSyncStatus()
   } catch (err) {
     console.warn('[cloud-sync] push failed:', err?.message || err)
     if (err?.code === 'auth-expired') {
+      authExpiredLatched = true
       closePushGate()
+      emitSyncStatus()
       return
     }
+    lastPushFailed = true
+    emitSyncStatus()
     if (!retryTimer) {
       retryTimer = setTimeout(() => {
         retryTimer = null
@@ -618,6 +724,11 @@ export async function settleLedger({ foreground = false } = {}) {
   } finally {
     settling = false
     try {
+      noteSettleOutcome(outcome)
+    } catch (e) {
+      console.warn('[cloud-sync] noteSettleOutcome failed:', e?.message || e)
+    }
+    try {
       handlers.onSettle?.(outcome)
     } catch (e) {
       console.warn('[cloud-sync] onSettle handler failed:', e?.message || e)
@@ -724,7 +835,12 @@ function attachLifecycleListeners() {
   target.addEventListener('focus', onForeground)
   // C1：online → re-settle，不直接 push
   target.addEventListener('online', () => {
+    emitSyncStatus()
     settleLedger()
+  })
+  // S3：离线立即刷新指示器（不等待 settle）
+  target.addEventListener('offline', () => {
+    emitSyncStatus()
   })
 }
 
@@ -785,7 +901,11 @@ export function resetSyncState() {
   retryTimer = null
   closePushGate()
   needRepull = false
+  lastPushFailed = false
+  authExpiredLatched = false
+  lastSettleOutcome = null
   ls().removeItem(SYNC_META_KEY)
   ls().removeItem(DIRTY_KEY)
   // pam-cloud-bound intentionally preserved (C2)
+  emitSyncStatus()
 }
