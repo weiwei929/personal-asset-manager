@@ -29,6 +29,9 @@
  * - pending/dirty 等态由 SyncStatusIndicator 承担，不另叠大声横幅
  *
  * 冲突解决路径显式豁免闸门（用户显式决定）。
+ *
+ * 登录前禁生命周期 settle：online / 回前台仅在 setSettleEnabled(true) 后触发。
+ * 单用户，不做换号 / emailHash。
  */
 import {
   collectLedgerData,
@@ -90,6 +93,12 @@ let needRepull = false
 let storagePatched = false
 let lifecycleAttached = false
 let settling = false
+/**
+ * 生命周期 settle 开关（内存态）。
+ * 仅 LoginGate 通过后打开；口令页上 online/回前台不得拉云（防退出清缓存后复活）。
+ * 直接调用 settleLedger() 不受此开关限制（smoke / 登录后显式 settle）。
+ */
+let settleEnabled = false
 
 /** S3/M3：供状态指示器读取的内存真源（不落盘） */
 let lastSettleOutcome = null
@@ -200,6 +209,15 @@ function openPushGate() {
 /** 关闭闸门（不改 dirty / version / pam-cloud-bound） */
 export function closePushGate() {
   pushArmed = false
+}
+
+/** LoginGate 通过后打开；退出 / 重置时关闭。只约束生命周期 settle。 */
+export function setSettleEnabled(on) {
+  settleEnabled = !!on
+}
+
+export function isSettleEnabled() {
+  return settleEnabled
 }
 
 function armGateAndCatchUpIfDirty() {
@@ -662,7 +680,11 @@ export async function settleLedger({ foreground = false } = {}) {
         clearDirty()
         needRepull = false
         openPushGate()
-        handlers.onHydrated?.(remote.version, remote.updatedAt)
+        try {
+          await handlers.onHydrated?.(remote.version, remote.updatedAt)
+        } catch (e) {
+          console.warn('[cloud-sync] onHydrated failed:', e?.message || e)
+        }
         outcome = 'hydrated'
         return outcome
       } catch (hydrateErr) {
@@ -776,7 +798,11 @@ export async function resolveConflictUseCloud() {
     clearDirty()
     needRepull = false
     openPushGate()
-    handlers.onHydrated?.(remote.version, remote.updatedAt)
+    try {
+      await handlers.onHydrated?.(remote.version, remote.updatedAt)
+    } catch (e) {
+      console.warn('[cloud-sync] onHydrated failed:', e?.message || e)
+    }
     return { ok: true }
   } catch (hydrateErr) {
     needRepull = true
@@ -821,6 +847,7 @@ export async function reloadAllStores() {
 
 // ── 初始化：patch localStorage + 生命周期（不自动 settle）──
 function onForeground() {
+  if (!settleEnabled) return
   const now = Date.now()
   if (now - lastForegroundPullAt < FOREGROUND_THROTTLE_MS) return
   lastForegroundPullAt = now
@@ -841,9 +868,10 @@ function attachLifecycleListeners() {
     if (ev && ev.persisted) onForeground()
   })
   target.addEventListener('focus', onForeground)
-  // C1：online → re-settle，不直接 push
+  // C1：online → re-settle，不直接 push；未登录不得拉云
   target.addEventListener('online', () => {
     emitSyncStatus()
+    if (!settleEnabled) return
     settleLedger()
   })
   // S3：离线立即刷新指示器（不等待 settle）
@@ -908,6 +936,7 @@ export function resetSyncState() {
   pushTimer = null
   retryTimer = null
   closePushGate()
+  settleEnabled = false
   needRepull = false
   lastPushFailed = false
   authExpiredLatched = false

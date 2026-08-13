@@ -217,59 +217,72 @@
               <h1 class="text-lg font-semibold tracking-tight">{{ getCurrentPageTitle() }}</h1>
             </header>
 
-            <!-- P0-2(c)：离线 + 曾绑定云端 + 无期初 → 禁止建账引导 -->
+            <!-- 登录后首次 settle：整块挡住，避免空缓存闪期初建账 -->
             <div
-              v-if="cloudBoundOffline"
-              class="mb-6 rounded-xl border border-sky-200 dark:border-sky-900/50
-                     bg-sky-50 dark:bg-sky-950/30 px-4 py-3"
+              v-if="syncSettling"
+              class="rounded-xl border border-border-light dark:border-border-dark
+                     bg-card-light dark:bg-card-dark px-4 py-10 text-center"
             >
-              <p class="text-sm text-sky-900 dark:text-sky-200">
-                账本在云端，当前离线，请联网后进入
-              </p>
-              <p class="mt-1 text-xs text-sky-800/80 dark:text-sky-300/80">
-                本机无缓存账本；联网后会自动从云端同步，请勿在此新建空账本。
+              <p class="text-sm text-text-light dark:text-text-dark">正在从云端同步账本…</p>
+              <p class="mt-2 text-xs text-subtext-light dark:text-subtext-dark">
+                请稍候，同步完成前不会进入建账页。
               </p>
             </div>
-
-            <!-- 未建账提示（非建账页时；离线绑定门闸开启时不展示建账引导） -->
-            <div
-              v-else-if="!hasOpenedBooks && activeMenu !== 'opening-books'"
-              class="mb-6 rounded-xl border border-amber-200 dark:border-amber-900/50
-                     bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex flex-wrap items-center justify-between gap-3"
-            >
-              <p class="text-sm text-amber-900 dark:text-amber-200">
-                尚未期初建账 · 总资产可能为 0，请先录入存量快照
-              </p>
-              <button
-                type="button"
-                class="text-sm font-medium text-amber-800 dark:text-amber-100 underline underline-offset-2"
-                @click="handleMenuSelect('opening-books')"
+            <template v-else>
+              <!-- P0-2(c)：离线 + 曾绑定云端 + 无期初 → 禁止建账引导 -->
+              <div
+                v-if="cloudBoundOffline"
+                class="mb-6 rounded-xl border border-sky-200 dark:border-sky-900/50
+                       bg-sky-50 dark:bg-sky-950/30 px-4 py-3"
               >
-                去建账
-              </button>
-            </div>
+                <p class="text-sm text-sky-900 dark:text-sky-200">
+                  账本在云端，当前离线，请联网后进入
+                </p>
+                <p class="mt-1 text-xs text-sky-800/80 dark:text-sky-300/80">
+                  本机无缓存账本；联网后会自动从云端同步，请勿在此新建空账本。
+                </p>
+              </div>
 
-            <div
-              v-if="cloudBoundOffline && activeMenu === 'opening-books'"
-              class="rounded-xl border border-sky-200 dark:border-sky-900/50
-                     bg-sky-50 dark:bg-sky-950/30 px-4 py-8 text-center"
-            >
-              <p class="text-sm text-sky-900 dark:text-sky-200">
-                账本在云端，当前离线，请联网后进入
-              </p>
-              <p class="mt-2 text-xs text-sky-800/80 dark:text-sky-300/80">
-                已禁止空账本 / 建账引导，避免离线新建覆盖云端真账本。
-              </p>
-            </div>
-            <OpeningBooks
-              v-else-if="activeMenu === 'opening-books'"
-              @done="onOpeningDone"
-            />
-            <Dashboard v-else-if="activeMenu === 'dashboard'" @openDialog="handleOpenDialog" />
-            <MonthlyFinance v-else-if="activeMenu === 'monthly-finance'" />
-            <BankAccounts v-else-if="activeMenu === 'bank-deposits'" />
-            <Investment v-else-if="activeMenu === 'stock-investment'" />
-            <LentMoney v-else-if="activeMenu === 'lent-money'" />
+              <!-- 未建账提示（非建账页时；离线绑定门闸开启时不展示建账引导） -->
+              <div
+                v-else-if="!hasOpenedBooks && activeMenu !== 'opening-books'"
+                class="mb-6 rounded-xl border border-amber-200 dark:border-amber-900/50
+                       bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex flex-wrap items-center justify-between gap-3"
+              >
+                <p class="text-sm text-amber-900 dark:text-amber-200">
+                  尚未期初建账 · 总资产可能为 0，请先录入存量快照
+                </p>
+                <button
+                  type="button"
+                  class="text-sm font-medium text-amber-800 dark:text-amber-100 underline underline-offset-2"
+                  @click="handleMenuSelect('opening-books')"
+                >
+                  去建账
+                </button>
+              </div>
+
+              <div
+                v-if="cloudBoundOffline && activeMenu === 'opening-books'"
+                class="rounded-xl border border-sky-200 dark:border-sky-900/50
+                       bg-sky-50 dark:bg-sky-950/30 px-4 py-8 text-center"
+              >
+                <p class="text-sm text-sky-900 dark:text-sky-200">
+                  账本在云端，当前离线，请联网后进入
+                </p>
+                <p class="mt-2 text-xs text-sky-800/80 dark:text-sky-300/80">
+                  已禁止空账本 / 建账引导，避免离线新建覆盖云端真账本。
+                </p>
+              </div>
+              <OpeningBooks
+                v-else-if="activeMenu === 'opening-books'"
+                @done="onOpeningDone"
+              />
+              <Dashboard v-else-if="activeMenu === 'dashboard'" @openDialog="handleOpenDialog" />
+              <MonthlyFinance v-else-if="activeMenu === 'monthly-finance'" />
+              <BankAccounts v-else-if="activeMenu === 'bank-deposits'" />
+              <Investment v-else-if="activeMenu === 'stock-investment'" />
+              <LentMoney v-else-if="activeMenu === 'lent-money'" />
+            </template>
           </div>
         </main>
       </div>
@@ -397,6 +410,7 @@ import {
   settleLedger,
   reloadAllStores,
   closePushGate,
+  setSettleEnabled,
   resolveConflictUseLocal,
   resolveConflictUseCloud,
   getRemoteLedger,
@@ -435,6 +449,7 @@ export default {
     const syncRemoteAhead = ref(null) // 回前台发现云端更新 { version, updatedAt }（提示条）
     const discardedRestoreAvailable = ref(false) // P1-2：用云端后可恢复
     const cloudBoundOffline = ref(false) // P0-2(c) 离线绑定门闸
+    const syncSettling = ref(false) // 登录后首次 settle，避免闪建账页
     const hasOpenedBooks = computed(() => openingStore.hasOpenedBooks)
     // S5'/M5：与冲突条 / 恢复条互斥；pending 等态不另开提示条
     const showForegroundRemoteTip = computed(() =>
@@ -482,8 +497,15 @@ export default {
      * S4' 普通退出（用户显式点击）：清本机账本缓存 + 保留 pam-cloud-bound + 强制 reload。
      * 与 idle / auth.logout 分路；与安全退出对 bound 的处理也分路。
      */
+    const goDashboardIfBooksOpen = () => {
+      if (openingStore.hasOpenedBooks) {
+        activeMenu.value = 'dashboard'
+      }
+    }
+
     const logout = async () => {
       try {
+        setSettleEnabled(false)
         const { wipeLedgerKeepCloudBound } = await import('./utils/ledgerWipe.js')
         const result = wipeLedgerKeepCloudBound()
         if (!result.success) {
@@ -624,6 +646,7 @@ export default {
     ]
 
     const getCurrentPageTitle = () => {
+      if (syncSettling.value) return '同步账本'
       if (activeMenu.value === 'opening-books') {
         return hasOpenedBooks.value ? '重新建账' : '期初建账'
       }
@@ -711,12 +734,18 @@ export default {
 
     /** P0-1：仅在 LoginGate 通过后 settle；门闸 UI 亦在该边界内 */
     const runSettleAfterAuth = () => {
+      setSettleEnabled(true)
+      syncSettling.value = true
       settleLedger()
         .then((outcome) => {
           applySettleOutcome(outcome)
+          goDashboardIfBooksOpen()
         })
         .catch((e) => {
           console.warn('[cloud-sync] settle after auth failed:', e?.message || e)
+        })
+        .finally(() => {
+          syncSettling.value = false
         })
     }
 
@@ -744,14 +773,17 @@ export default {
             }
           })
         },
-        onHydrated: () => {
+        onHydrated: async () => {
           cloudBoundOffline.value = false
           ElMessage.success('已从云端同步最新账本')
-          // P0-3：优先重灌 Pinia，整页 reload 仅作兜底
-          reloadAllStores().catch((e) => {
+          // P0-3：优先重灌 Pinia，整页 reload 仅作兜底；等重灌完再关门闸
+          try {
+            await reloadAllStores()
+            goDashboardIfBooksOpen()
+          } catch (e) {
             console.warn('[cloud-sync] reloadAllStores failed, fallback reload:', e?.message || e)
             window.location.reload()
-          })
+          }
         },
         onHydrateFailed: () => {
           ElMessage.error('云端账本合入失败，请检查网络后重试（已禁止推送以防覆盖云端）')
@@ -782,6 +814,7 @@ export default {
       if (authed && !wasAuthed) {
         runSettleAfterAuth()
       } else if (!authed) {
+        setSettleEnabled(false)
         closePushGate()
       }
     })
@@ -903,6 +936,7 @@ export default {
       resetting,
       hasOpenedBooks,
       cloudBoundOffline,
+      syncSettling,
       isAuthenticated,
       menuItems,
       handleMenuSelect,

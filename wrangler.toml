@@ -1,6 +1,6 @@
 # PAM 二期云同步（D5）— Cloudflare Pages 配置
 # 文档：https://developers.cloudflare.com/pages/functions/
-# KV 绑定在 dashboard（Pages 项目 → Settings → Bindings），代码读取 env.PAM_LEDGER
+# 变量与绑定均以本文件为准（控制台的「绑定」已被 wrangler.toml 接管，无法在后台添加）
 
 name = "personal-asset-manager"
 pages_build_output_dir = "dist"
@@ -8,4 +8,9 @@ compatibility_date = "2026-08-07"
 
 [vars]
 CF_ACCESS_TEAM_DOMAIN = "pf2008.cloudflareaccess.com"
-CF_ACCESS_AUD = "bfcb4871-f05b-4f4a-b9e5-0c3288265783"
+CF_ACCESS_AUD = "c1dc91ac8b0835da8820071ff2c8fb6d020ec5074db7bd34c0e48b448bbe6f4c"
+
+# KV：账本存储，键 ledger:{email}；代码读 env.PAM_LEDGER
+[[kv_namespaces]]
+binding = "PAM_LEDGER"
+id = "5699a923e525452ca184c43d6088d727"

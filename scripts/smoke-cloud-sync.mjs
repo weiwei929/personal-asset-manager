@@ -2,7 +2,7 @@
  * D6 门闩 · 双标签云同步 smoke（模拟）+ v1.08.12 S1' / S2' / S4' 门闩
  * 用两个独立模块实例模拟「设备 A / 设备 B」+ mock 云端（KV 版乐观锁）：
  *   A 记账 → 防抖推云 → B 启动拉云拿到数据 → 冲突 409 → 用本地/用云端解决
- * S1'：settle 前不抢跑 PUT；hydrate 失败禁推；online → re-settle
+ * S1'：settle 前不抢跑 PUT；hydrate 失败禁推；online → re-settle；未登录 online 不 settle
  * S2'：云优先 hydrate；dirty 不跟云；无指纹静默跟云；empty-cloud 补推；hydrate 回滚；冲突备份恢复
  * S4'：pam-cloud-bound 写入；普通/安全退出分路；resetSyncState 保留 bound；idle 源码门闩
  * 运行：node scripts/smoke-cloud-sync.mjs
@@ -295,6 +295,46 @@ devF.resetSyncState()
 assert.equal(devF.isPushArmed(), false)
 assert.ok(lsF.getItem('pam-cloud-bound') != null, 'resetSyncState 不得清除 pam-cloud-bound')
 console.log('✓ resetSyncState 关闸门且保留 pam-cloud-bound')
+
+// ═══════════════ S1'：未登录 online 不得 settle（口令前禁止复活） ═══════════════
+const lsPreAuth = createLocalStorage()
+globalThis.localStorage = lsPreAuth
+cloudKV.clear()
+cloudKV.set(EMAIL_KEY, JSON.stringify({
+  version: 4,
+  updatedAt: '2026-08-12T00:00:00.000Z',
+  data: { 'pam-bank-accounts': [{ id: 1, bank: '口令前不该出现', demandBalance: 9 }] }
+}))
+const lifeTarget = new EventTarget()
+const prevAdd = globalThis.addEventListener
+const prevDispatch = globalThis.dispatchEvent
+globalThis.addEventListener = lifeTarget.addEventListener.bind(lifeTarget)
+globalThis.dispatchEvent = lifeTarget.dispatchEvent.bind(lifeTarget)
+const putsBeforePreAuth = putCount
+const devPreAuth = await import('../src/utils/cloudSync.js?browser=preAuth')
+devPreAuth.initSync({})
+assert.equal(devPreAuth.isSettleEnabled(), false, '默认不得生命周期 settle')
+lifeTarget.dispatchEvent(new Event('online'))
+await sleep(80)
+assert.equal(lsPreAuth.getItem('pam-bank-accounts'), null, '未登录 online 不得 hydrate')
+assert.equal(devPreAuth.getLastSettleOutcome(), null, '未登录 online 不得 settle')
+assert.equal(putCount, putsBeforePreAuth, '未登录 online 不得 PUT')
+
+devPreAuth.setSettleEnabled(true)
+lifeTarget.dispatchEvent(new Event('online'))
+await sleep(80)
+assert.equal(devPreAuth.getLastSettleOutcome(), 'hydrated', '放行后 online 应 settle')
+assert.deepEqual(
+  JSON.parse(lsPreAuth.getItem('pam-bank-accounts')),
+  [{ id: 1, bank: '口令前不该出现', demandBalance: 9 }]
+)
+devPreAuth.resetSyncState()
+assert.equal(devPreAuth.isSettleEnabled(), false, 'resetSyncState 应关闭生命周期 settle')
+if (typeof prevAdd === 'function') globalThis.addEventListener = prevAdd
+else delete globalThis.addEventListener
+if (typeof prevDispatch === 'function') globalThis.dispatchEvent = prevDispatch
+else delete globalThis.dispatchEvent
+console.log('✓ S1\' 未登录 online 不得 settle；放行后才拉云')
 
 // ═══════════════ S4' / M8'：pam-cloud-bound 写入 + 退出分路 ═══════════════
 
